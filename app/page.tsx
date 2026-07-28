@@ -441,7 +441,7 @@ export default function LoopLanding() {
               The answer to &ldquo;what should we build next&rdquo; is already in your inbox.
             </h2>
             <p className={"mt-4 leading-relaxed " + t.muted}>
-              It's scattered across five channels and a hundred spreadsheets, one sentence at a time.
+              It&apos;s scattered across five channels and a hundred spreadsheets, one sentence at a time.
               No team has hours to read, tag, and synthesize all of it by hand — so decisions get made
               on gut feel instead.
             </p>
@@ -518,7 +518,7 @@ export default function LoopLanding() {
           <div className={"mt-8 rounded-xl border p-5 " + (isDark ? "border-amber-500/30 bg-amber-500/5" : "border-amber-300 bg-amber-50")}>
             <p className={"text-sm " + (isDark ? "text-amber-200" : "text-amber-800")}>
               <span className="font-medium">Non-negotiable:</span> every query that touches feedback, themes, reports, or users
-              is filtered by the caller's workspace ID — no cross-tenant access, even by guessing an ID in the URL.
+              is filtered by the caller&apos;s workspace ID — no cross-tenant access, even by guessing an ID in the URL.
             </p>
           </div>
         </div>
@@ -599,7 +599,7 @@ export default function LoopLanding() {
                 </span>
                 <span className="font-display font-semibold text-sm">LOOP</span>
               </div>
-              <p className={"text-sm max-w-xs " + t.mutedFaint}>AI customer-feedback intelligence for teams who'd rather ship the right thing than guess.</p>
+              <p className={"text-sm max-w-xs " + t.mutedFaint}>AI customer-feedback intelligence for teams who&apos;d rather ship the right thing than guess.</p>
             </div>
             {FOOTER_COLUMNS.map((col) => (
               <div key={col.title}>
