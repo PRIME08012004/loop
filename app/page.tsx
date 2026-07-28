@@ -1,64 +1,624 @@
-import Image from "next/image";
-export default function Home() {
+"use client";
+
+import { useState } from "react";
+import { motion } from "framer-motion";
+
+/**
+ * LOOP — AI customer-feedback intelligence platform
+ * Marketing landing page
+ * -----------------------------------------------------------------
+ * Next.js 14 App Router:
+ *   1. Save as  app/page.jsx
+ *   2. Install dependencies (see bash command below the chat)
+ *   3. Tailwind CSS must be enabled — only core utility classes are
+ *      used here, no tailwind.config changes needed.
+ *
+ * Icons are inline SVG (no icon library). Motion is Framer Motion.
+ */
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
+};
+
+const stagger = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1 } },
+};
+
+const NAV_LINKS = ["Features", "Architecture", "Timeline", "Stack"];
+
+const SIDEBAR_ITEMS = [
+  { label: "Dashboard", icon: "grid" },
+  { label: "Inbox", icon: "inbox" },
+  { label: "Trends", icon: "trend" },
+  { label: "Ask LOOP", icon: "chat" },
+  { label: "Reports", icon: "report" },
+  { label: "Settings", icon: "settings" },
+];
+
+const FEEDBACK_ROWS = [
+  { content: "Onboarding took forever to invite my team", channel: "Support", sentiment: "Negative", status: "new" },
+  { content: "New dashboard is gorgeous and finally fast", channel: "App store", sentiment: "Positive", status: "reviewed" },
+  { content: "Mobile experience needs work overall", channel: "NPS", sentiment: "Neutral", status: "new" },
+  { content: "Wants SSO before renewing — third ask", channel: "Sales", sentiment: "Negative", status: "actioned" },
+];
+
+const FEATURES = [
+  {
+    id: "01",
+    title: "Auto-classification",
+    blurb: "Every item is tagged the moment it arrives — sentiment, score, theme, and feature area — no manual triage.",
+    points: ["Strict JSON output, validated before save", "Stored on ingest, never recomputed on render", "One-click re-classify for corrections"],
+    icon: "tag",
+  },
+  {
+    id: "02",
+    title: "Theme clustering & trends",
+    blurb: "Similar feedback groups itself into named themes, and a trends view flags what's spiking week over week.",
+    points: ["New items join an existing theme or start one", "Drill into any theme's underlying feedback", "Spike detection vs. the previous period"],
+    icon: "cluster",
+  },
+  {
+    id: "03",
+    title: "Ask LOOP",
+    blurb: "Plain-English questions, answered from real feedback — retrieval first, generation second, nothing invented.",
+    points: ["Semantic search over embedded feedback", "Answers cite the exact items they used", "Grounding is mandatory, not optional"],
+    icon: "chat",
+  },
+  {
+    id: "04",
+    title: "Voice-of-Customer report",
+    blurb: "One click turns a period of raw feedback into a digest a product lead could forward to leadership as-is.",
+    points: ["Top themes, sentiment shifts, verbatim quotes", "Numbers pre-computed in code, narrated by AI", "Saved, revisitable, and exportable"],
+    icon: "report",
+  },
+];
+
+const ARCHITECTURE = [
+  { label: "Client", detail: "Next.js App Router · Dashboard, Inbox, Trends, Ask LOOP" },
+  { label: "API layer", detail: "Route handlers · auth guard · role guard · Zod validation" },
+  { label: "Services", detail: "AI service · ingestion service · embeddings & search" },
+  { label: "Data", detail: "PostgreSQL via Prisma · Claude API · embeddings provider" },
+];
+
+const TIMELINE = [
+  { week: "Phase 1", title: "Foundation & data layer", deliverable: "Auth, workspaces, roles, and basic feedback CRUD." },
+  { week: "Phase 2", title: "Core application", deliverable: "Bulk import, a filterable inbox, and a dashboard shell." },
+  { week: "Phase 3", title: "AI integration", deliverable: "Classification, theme trends, and Ask LOOP on real data." },
+  { week: "Phase 4", title: "Production hardening", deliverable: "Voice-of-Customer report, polished UX, full test pass." },
+];
+
+const STACK = ["Next.js 14", "TypeScript", "Tailwind CSS", "PostgreSQL", "Prisma", "NextAuth", "Claude API", "pgvector", "Recharts", "Zod", "Vercel"];
+
+const FOOTER_COLUMNS = [
+  { title: "Product", links: ["Features", "Architecture", "Pricing", "Changelog"] },
+  { title: "Company", links: ["About", "Blog", "Careers", "Contact"] },
+  { title: "Resources", links: ["Docs", "API reference", "Status", "Support"] },
+  { title: "Legal", links: ["Privacy", "Terms", "Security"] },
+];
+
+function Icon({ name, className = "w-5 h-5" }) {
+  const common = { className, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 1.6 };
+  switch (name) {
+    case "tag":
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 11.5V5a2 2 0 0 1 2-2h6.5L21 11.5a2 2 0 0 1 0 2.8l-6.7 6.7a2 2 0 0 1-2.8 0L3 11.5Z" />
+          <circle cx="8" cy="8" r="1.4" />
+        </svg>
+      );
+    case "cluster":
+      return (
+        <svg {...common}>
+          <circle cx="7" cy="7" r="3" />
+          <circle cx="17" cy="7" r="3" />
+          <circle cx="12" cy="17" r="3" />
+          <path strokeLinecap="round" d="M9.2 8.8 10.5 14.8M14.8 8.8 13.5 14.8" />
+        </svg>
+      );
+    case "chat":
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v10H8l-4 4V5Z" />
+          <path strokeLinecap="round" d="M8 9.5h8M8 12.5h5" />
+        </svg>
+      );
+    case "report":
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 3h9l4 4v14H6V3Z" />
+          <path strokeLinecap="round" d="M9 12h6M9 15.5h6M9 8.5h3" />
+        </svg>
+      );
+    case "loop":
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" d="M4 12a5 5 0 0 1 5-5h6M20 12a5 5 0 0 1-5 5H9" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="m12 4 3 3-3 3M12 20l-3-3 3-3" />
+        </svg>
+      );
+    case "sun":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="4" />
+          <path strokeLinecap="round" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+        </svg>
+      );
+    case "moon":
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />
+        </svg>
+      );
+    case "grid":
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="3.5" width="7" height="7" rx="1.2" />
+          <rect x="13.5" y="3.5" width="7" height="7" rx="1.2" />
+          <rect x="3.5" y="13.5" width="7" height="7" rx="1.2" />
+          <rect x="13.5" y="13.5" width="7" height="7" rx="1.2" />
+        </svg>
+      );
+    case "inbox":
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h5l1.5 3h5L16 12h5M3 12l1.5-6.5A2 2 0 0 1 6.4 4h11.2a2 2 0 0 1 1.9 1.5L21 12M3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6" />
+        </svg>
+      );
+    case "trend":
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 17l5-5 4 4 8-9M20 7h-4M20 7v4" />
+        </svg>
+      );
+    case "settings":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="2.6" />
+          <path strokeLinecap="round" d="M12 4v1.6M12 18.4V20M20 12h-1.6M5.6 12H4M17 7l-1.1 1.1M8.1 15.9 7 17M17 17l-1.1-1.1M8.1 8.1 7 7" />
+        </svg>
+      );
+    case "search":
+      return (
+        <svg {...common}>
+          <circle cx="10.5" cy="10.5" r="6" />
+          <path strokeLinecap="round" d="M20 20l-4.5-4.5" />
+        </svg>
+      );
+    case "plus":
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+function StatusPill({ status, isDark }) {
+  const map = {
+    new: isDark ? "bg-slate-100 text-slate-900" : "bg-slate-900 text-white",
+    reviewed: "bg-sky-500/15 text-sky-500 border border-sky-500/30",
+    actioned: "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30",
+  };
+  return <span className={"inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium " + map[status]}>{status}</span>;
+}
+
+function SentimentDot({ sentiment }) {
+  const color = sentiment === "Negative" ? "bg-rose-500" : sentiment === "Positive" ? "bg-emerald-500" : "bg-amber-500";
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <span className="inline-flex items-center gap-1.5">
+      <span className={"h-1.5 w-1.5 rounded-full " + color} />
+      {sentiment}
+    </span>
+  );
+}
+
+export default function LoopLanding() {
+  const [isDark, setIsDark] = useState(false);
+  const [activeWeek, setActiveWeek] = useState(0);
+
+  const t = isDark
+    ? {
+        page: "bg-slate-950 text-slate-200",
+        navBg: "bg-slate-950/70 border-white/10",
+        navText: "text-slate-300",
+        heroSub: "text-slate-400",
+        headline: "text-white",
+        cardBg: "bg-slate-900/60 border-white/10",
+        cardBgSolid: "bg-slate-900 border-white/10",
+        sidebarText: "text-slate-400",
+        sidebarActive: "bg-white/5 text-white",
+        tableHeadText: "text-slate-500",
+        tableRowBorder: "border-white/5",
+        muted: "text-slate-400",
+        mutedFaint: "text-slate-500",
+        border: "border-white/10",
+        chipBg: "bg-white/5 border-white/10 text-slate-300",
+        primaryBtn: "bg-white text-slate-950 hover:bg-slate-200",
+        secondaryBtn: "border-white/15 text-slate-200 hover:bg-white/5",
+        sectionAltBg: "bg-slate-900/30 border-white/5",
+        inputBg: "bg-slate-900 border-white/10 text-slate-300 placeholder-slate-600",
+      }
+    : {
+        page: "bg-white text-slate-900",
+        navBg: "bg-white/70 border-slate-200",
+        navText: "text-slate-600",
+        heroSub: "text-slate-500",
+        headline: "text-slate-900",
+        cardBg: "bg-slate-50 border-slate-200",
+        cardBgSolid: "bg-white border-slate-200",
+        sidebarText: "text-slate-500",
+        sidebarActive: "bg-slate-100 text-slate-900",
+        tableHeadText: "text-slate-400",
+        tableRowBorder: "border-slate-100",
+        muted: "text-slate-600",
+        mutedFaint: "text-slate-500",
+        border: "border-slate-200",
+        chipBg: "bg-slate-50 border-slate-200 text-slate-600",
+        primaryBtn: "bg-slate-900 text-white hover:bg-slate-700",
+        secondaryBtn: "border-slate-300 text-slate-700 hover:bg-slate-50",
+        sectionAltBg: "bg-slate-50 border-slate-200",
+        inputBg: "bg-white border-slate-200 text-slate-600 placeholder-slate-400",
+      };
+
+  return (
+    <div className={"min-h-screen transition-colors duration-300 " + t.page} style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+        .font-display { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        .font-mono-loop { font-family: 'JetBrains Mono', monospace; }
+      `}</style>
+
+      {/* NAV */}
+      <motion.header
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5 }}
+        className={"sticky top-0 z-50 border-b backdrop-blur-md " + t.navBg}
+      >
+        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-2">
+            <span className={"flex h-7 w-7 items-center justify-center rounded-md border " + (isDark ? "bg-white/10 border-white/20 text-white" : "bg-slate-900 border-slate-900 text-white")}>
+              <Icon name="loop" className="w-4 h-4" />
+            </span>
+            <span className="font-display font-semibold text-base tracking-tight">LOOP</span>
+          </div>
+
+          <nav className={"hidden md:flex items-center gap-8 text-sm " + t.navText}>
+            {NAV_LINKS.map((l) => (
+              <a key={l} href={"#" + l.toLowerCase()} className={isDark ? "hover:text-white transition-colors" : "hover:text-slate-900 transition-colors"}>
+                {l}
+              </a>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsDark((d) => !d)}
+              aria-label="Toggle theme"
+              className={"flex h-8 w-8 items-center justify-center rounded-full border transition-colors " + (isDark ? "border-white/15 text-slate-300 hover:bg-white/5" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              <Icon name={isDark ? "sun" : "moon"} className="w-4 h-4" />
+            </button>
+            <a href="#" className={"hidden sm:inline text-sm font-medium " + t.navText}>
+              Login
+            </a>
+            <motion.a whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} href="#" className={"rounded-full text-sm font-medium px-4 py-2 transition-colors " + t.primaryBtn}>
+              Sign up
+            </motion.a>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+      </motion.header>
+
+      {/* HERO */}
+      <section className="relative px-6 pt-24 pb-20 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {[
+            { top: "18%", left: "8%", w: 70, rot: -35 },
+            { top: "30%", left: "18%", w: 40, rot: -35 },
+            { top: "14%", left: "82%", w: 60, rot: -35 },
+            { top: "34%", left: "90%", w: 34, rot: -35 },
+          ].map((l, i) => (
+            <span
+              key={i}
+              className={"absolute h-px " + (isDark ? "bg-amber-500/50" : "bg-amber-400/60")}
+              style={{ top: l.top, left: l.left, width: l.w, transform: `rotate(${l.rot}deg)` }}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          ))}
         </div>
-      </main>
+
+        <motion.div initial="hidden" animate="show" variants={stagger} className="relative max-w-3xl mx-auto text-center">
+          <motion.span variants={fadeUp} className={"inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium font-mono-loop " + t.chipBg}>
+            AI-POWERED FEEDBACK INTELLIGENCE
+          </motion.span>
+          <motion.h1 variants={fadeUp} className={"font-display mt-6 text-5xl md:text-6xl font-semibold tracking-tight leading-[1.08] " + t.headline}>
+            Close the loop on
+            <br />
+            customer feedback.
+          </motion.h1>
+          <motion.p variants={fadeUp} className={"mt-6 max-w-xl mx-auto text-base md:text-lg " + t.heroSub}>
+            LOOP classifies, clusters, and answers questions about every piece of feedback you
+            receive — so you spend your time deciding what to build, not reading spreadsheets.
+          </motion.p>
+          <motion.div variants={fadeUp} className="mt-8 flex items-center justify-center gap-3">
+            <motion.a whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} href="#" className={"rounded-full text-sm font-medium px-6 py-3 transition-colors " + t.primaryBtn}>
+              Sign up
+            </motion.a>
+            <motion.a whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} href="#features" className={"rounded-full border text-sm font-medium px-6 py-3 transition-colors " + t.secondaryBtn}>
+              View live demo
+            </motion.a>
+          </motion.div>
+        </motion.div>
+
+        {/* FLOATING DASHBOARD PREVIEW */}
+        <motion.div
+          initial={{ opacity: 0, y: 40, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          className={"relative max-w-4xl mx-auto mt-16 rounded-2xl border shadow-2xl overflow-hidden " + t.cardBgSolid}
+        >
+          <div className="grid grid-cols-[180px_1fr]">
+            <aside className={"border-r p-4 " + t.border}>
+              <div className="flex items-center gap-2 mb-6 px-1">
+                <span className={"flex h-6 w-6 items-center justify-center rounded-md " + (isDark ? "bg-white/10 text-white" : "bg-slate-900 text-white")}>
+                  <Icon name="loop" className="w-3.5 h-3.5" />
+                </span>
+                <span className="font-display font-semibold text-sm">LOOP</span>
+              </div>
+              <nav className="space-y-1">
+                {SIDEBAR_ITEMS.map((s, i) => (
+                  <div key={s.label} className={"flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm " + (i === 1 ? t.sidebarActive : t.sidebarText)}>
+                    <Icon name={s.icon} className="w-4 h-4" />
+                    {s.label}
+                  </div>
+                ))}
+              </nav>
+            </aside>
+
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-5">
+                <p className="font-display text-lg">Feedback inbox</p>
+                <div className="flex items-center gap-2">
+                  <div className={"hidden sm:flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm " + t.inputBg}>
+                    <Icon name="search" className="w-3.5 h-3.5" />
+                    <span>Search feedback...</span>
+                  </div>
+                  <button className={"flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium " + t.primaryBtn}>
+                    <Icon name="plus" className="w-3.5 h-3.5" />
+                    New feedback
+                  </button>
+                </div>
+              </div>
+
+              <p className={"text-xs font-mono-loop uppercase tracking-wider mb-3 " + t.mutedFaint}>Recent feedback</p>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className={t.tableHeadText}>
+                      <th className="text-left font-medium pb-2">Content</th>
+                      <th className="text-left font-medium pb-2">Channel</th>
+                      <th className="text-left font-medium pb-2">Sentiment</th>
+                      <th className="text-left font-medium pb-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {FEEDBACK_ROWS.map((r, i) => (
+                      <tr key={i} className={"border-t " + t.tableRowBorder}>
+                        <td className="py-2.5 pr-4 max-w-[220px] truncate">{r.content}</td>
+                        <td className={"py-2.5 pr-4 " + t.muted}>{r.channel}</td>
+                        <td className={"py-2.5 pr-4 " + t.muted}>
+                          <SentimentDot sentiment={r.sentiment} />
+                        </td>
+                        <td className="py-2.5">
+                          <StatusPill status={r.status} isDark={isDark} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* PROBLEM / OPPORTUNITY */}
+      <section className={"px-6 py-24 border-y " + t.sectionAltBg}>
+        <motion.div
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.3 }}
+          variants={stagger}
+          className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center"
+        >
+          <motion.div variants={fadeUp}>
+            <p className="text-xs font-mono-loop uppercase tracking-wider text-violet-500 mb-3">The problem</p>
+            <h2 className={"font-display text-3xl md:text-4xl font-semibold leading-tight " + t.headline}>
+              The answer to &ldquo;what should we build next&rdquo; is already in your inbox.
+            </h2>
+            <p className={"mt-4 leading-relaxed " + t.muted}>
+              It's scattered across five channels and a hundred spreadsheets, one sentence at a time.
+              No team has hours to read, tag, and synthesize all of it by hand — so decisions get made
+              on gut feel instead.
+            </p>
+            <div className="mt-8 grid grid-cols-2 gap-4">
+              <div className={"rounded-xl border p-4 " + t.cardBg}>
+                <p className="font-display text-2xl">5+</p>
+                <p className={"text-sm " + t.mutedFaint}>channels feeding in every week</p>
+              </div>
+              <div className={"rounded-xl border p-4 " + t.cardBg}>
+                <p className="font-display text-2xl">0 hrs</p>
+                <p className={"text-sm " + t.mutedFaint}>available to read it all manually</p>
+              </div>
+            </div>
+          </motion.div>
+          <motion.div variants={fadeUp} className={"rounded-2xl border p-8 " + t.cardBg}>
+            <p className="text-xs font-mono-loop uppercase tracking-wider text-violet-500 mb-4">With LOOP</p>
+            <blockquote className={"font-display text-xl md:text-2xl leading-snug " + t.headline}>
+              &ldquo;43 customers asked for this in the last 30 days, and complaints are up 60% week-over-week.&rdquo;
+            </blockquote>
+            <p className={"mt-4 text-sm " + t.muted}>
+              From &ldquo;we think customers want this&rdquo; to a ranked, evidence-backed answer — in one dashboard.
+            </p>
+          </motion.div>
+        </motion.div>
+      </section>
+
+      {/* FEATURES */}
+      <section id="features" className="max-w-6xl mx-auto px-6 py-24">
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.3 }} variants={stagger} className="text-center mb-14">
+          <motion.p variants={fadeUp} className="text-xs font-mono-loop uppercase tracking-wider text-violet-500 mb-3">AI features</motion.p>
+          <motion.h2 variants={fadeUp} className={"font-display text-3xl md:text-4xl font-semibold " + t.headline}>The intelligence layer</motion.h2>
+          <motion.p variants={fadeUp} className={"mt-3 max-w-xl mx-auto " + t.muted}>Four features that require genuine understanding to build — not a chatbot bolted on.</motion.p>
+        </motion.div>
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={stagger} className="grid md:grid-cols-2 gap-6">
+          {FEATURES.map((f) => (
+            <motion.div key={f.id} variants={fadeUp} whileHover={{ y: -4 }} className={"rounded-2xl border p-7 transition-shadow " + t.cardBg}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className={"flex h-9 w-9 items-center justify-center rounded-lg border " + (isDark ? "bg-violet-600/15 text-violet-400 border-violet-500/25" : "bg-violet-50 text-violet-600 border-violet-200")}>
+                  <Icon name={f.icon} />
+                </span>
+                <span className={"text-xs font-mono-loop " + t.mutedFaint}>{f.id}</span>
+                <h3 className={"font-display text-lg ml-auto " + t.headline}>{f.title}</h3>
+              </div>
+              <p className={"text-sm leading-relaxed mb-4 " + t.muted}>{f.blurb}</p>
+              <ul className="space-y-2">
+                {f.points.map((p, i) => (
+                  <li key={i} className={"flex items-start gap-2 text-sm " + t.muted}>
+                    <span className="mt-1.5 h-1 w-1 rounded-full bg-violet-500 flex-shrink-0" />
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
+          ))}
+        </motion.div>
+      </section>
+
+      {/* ARCHITECTURE */}
+      <section id="architecture" className={"px-6 py-24 border-y " + t.sectionAltBg}>
+        <div className="max-w-6xl mx-auto">
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.3 }} variants={stagger} className="text-center mb-14">
+            <motion.p variants={fadeUp} className="text-xs font-mono-loop uppercase tracking-wider text-violet-500 mb-3">System architecture</motion.p>
+            <motion.h2 variants={fadeUp} className={"font-display text-3xl md:text-4xl font-semibold " + t.headline}>Three tiers. One rule.</motion.h2>
+          </motion.div>
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={stagger} className="grid md:grid-cols-4 gap-4">
+            {ARCHITECTURE.map((a, i) => (
+              <motion.div key={i} variants={fadeUp} className={"relative rounded-xl border p-5 " + t.cardBgSolid}>
+                <p className="text-xs font-mono-loop text-violet-500 mb-1">{String(i + 1).padStart(2, "0")}</p>
+                <p className={"font-display mb-1 " + t.headline}>{a.label}</p>
+                <p className={"text-xs leading-relaxed " + t.mutedFaint}>{a.detail}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+          <div className={"mt-8 rounded-xl border p-5 " + (isDark ? "border-amber-500/30 bg-amber-500/5" : "border-amber-300 bg-amber-50")}>
+            <p className={"text-sm " + (isDark ? "text-amber-200" : "text-amber-800")}>
+              <span className="font-medium">Non-negotiable:</span> every query that touches feedback, themes, reports, or users
+              is filtered by the caller's workspace ID — no cross-tenant access, even by guessing an ID in the URL.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* TIMELINE */}
+      <section id="timeline" className="max-w-6xl mx-auto px-6 py-24">
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.3 }} variants={stagger} className="text-center mb-14">
+          <motion.p variants={fadeUp} className="text-xs font-mono-loop uppercase tracking-wider text-violet-500 mb-3">Build plan</motion.p>
+          <motion.h2 variants={fadeUp} className={"font-display text-3xl md:text-4xl font-semibold " + t.headline}>From zero to production</motion.h2>
+        </motion.div>
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={stagger} className="grid md:grid-cols-4 gap-4">
+          {TIMELINE.map((tl, i) => (
+            <motion.button
+              key={i}
+              variants={fadeUp}
+              onClick={() => setActiveWeek(i)}
+              className={
+                "relative text-left rounded-xl border p-5 transition-colors overflow-hidden " +
+                (activeWeek === i ? (isDark ? "border-violet-500/50" : "border-violet-400") : t.cardBg)
+              }
+            >
+              {activeWeek === i && (
+                <motion.div
+                  layoutId="activePhase"
+                  className={"absolute inset-0 -z-10 " + (isDark ? "bg-violet-500/10" : "bg-violet-50")}
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                />
+              )}
+              <p className="text-xs font-mono-loop text-violet-500 mb-2">{tl.week}</p>
+              <p className={"font-display mb-2 " + t.headline}>{tl.title}</p>
+              <p className={"text-xs leading-relaxed " + t.mutedFaint}>{tl.deliverable}</p>
+            </motion.button>
+          ))}
+        </motion.div>
+      </section>
+
+      {/* STACK */}
+      <section id="stack" className={"px-6 py-16 border-y " + t.sectionAltBg}>
+        <div className="max-w-5xl mx-auto text-center">
+          <p className={"text-xs font-mono-loop uppercase tracking-wider mb-6 " + t.mutedFaint}>Built with</p>
+          <div className="flex flex-wrap justify-center gap-3">
+            {STACK.map((s) => (
+              <span key={s} className={"rounded-full border px-4 py-2 text-sm font-mono-loop " + t.chipBg}>
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="px-6 py-24 text-center">
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={stagger}>
+          <motion.h2 variants={fadeUp} className={"font-display text-3xl md:text-4xl font-semibold " + t.headline}>
+            Stop guessing what customers want.
+          </motion.h2>
+          <motion.p variants={fadeUp} className={"mt-4 " + t.muted}>Get started with LOOP in minutes — no credit card required.</motion.p>
+          <motion.div variants={fadeUp} className="mt-8 flex items-center justify-center gap-3">
+            <motion.a whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} href="#" className={"rounded-full text-sm font-medium px-6 py-3 transition-colors " + t.primaryBtn}>
+              Sign up
+            </motion.a>
+            <motion.a whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} href="#" className={"rounded-full border text-sm font-medium px-6 py-3 transition-colors " + t.secondaryBtn}>
+              Talk to sales
+            </motion.a>
+          </motion.div>
+        </motion.div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className={"border-t px-6 py-14 " + t.border}>
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
+            <div className="col-span-2">
+              <div className="flex items-center gap-2 mb-3">
+                <span className={"flex h-6 w-6 items-center justify-center rounded-md " + (isDark ? "bg-white/10 text-white" : "bg-slate-900 text-white")}>
+                  <Icon name="loop" className="w-3.5 h-3.5" />
+                </span>
+                <span className="font-display font-semibold text-sm">LOOP</span>
+              </div>
+              <p className={"text-sm max-w-xs " + t.mutedFaint}>AI customer-feedback intelligence for teams who'd rather ship the right thing than guess.</p>
+            </div>
+            {FOOTER_COLUMNS.map((col) => (
+              <div key={col.title}>
+                <p className={"text-xs font-mono-loop uppercase tracking-wider mb-3 " + t.mutedFaint}>{col.title}</p>
+                <ul className="space-y-2">
+                  {col.links.map((l) => (
+                    <li key={l}>
+                      <a href="#" className={"text-sm " + t.muted + (isDark ? " hover:text-white" : " hover:text-slate-900")}>
+                        {l}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className={"mt-10 pt-6 border-t text-xs " + t.border + " " + t.mutedFaint}>© 2026 LOOP. All rights reserved.</div>
+        </div>
+      </footer>
     </div>
   );
 }
