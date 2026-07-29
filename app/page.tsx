@@ -2,6 +2,7 @@
 
 import { useState, type SVGProps } from "react";
 import { motion, type Variants } from "framer-motion";
+import { FloatingDock } from "@/components/ui/floating-dock";
 
 type IconName =
   | "tag"
@@ -91,8 +92,6 @@ const stagger: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.1 } },
 };
-
-const NAV_LINKS = ["Features", "Architecture", "Timeline", "Stack"] as const;
 
 const SIDEBAR_ITEMS: readonly SidebarItem[] = [
   { label: "Dashboard", icon: "grid" },
@@ -482,9 +481,31 @@ export default function LoopLanding() {
           "bg-white border-slate-200 text-slate-600 placeholder-slate-400",
       };
 
+  const dockItems = [
+    { title: "Features", icon: <Icon name="tag" />, href: "#features" },
+    {
+      title: "Architecture",
+      icon: <Icon name="cluster" />,
+      href: "#architecture",
+    },
+    { title: "Timeline", icon: <Icon name="trend" />, href: "#timeline" },
+    { title: "Stack", icon: <Icon name="grid" />, href: "#stack" },
+    { title: "Login", icon: <Icon name="loop" />, href: "#" },
+    { title: "Sign up", icon: <Icon name="plus" />, href: "#" },
+    {
+      title: isDark ? "Use light theme" : "Use dark theme",
+      icon: <Icon name={isDark ? "sun" : "moon"} />,
+      onClick: () => setIsDark((dark) => !dark),
+    },
+  ];
+
   return (
     <div
-      className={"min-h-screen transition-colors duration-300 " + t.page}
+      className={
+        "min-h-screen transition-colors duration-300 " +
+        t.page +
+        (isDark ? " dark" : "")
+      }
       style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
     >
       <style>{`
@@ -493,81 +514,9 @@ export default function LoopLanding() {
         .font-mono-loop { font-family: 'JetBrains Mono', monospace; }
       `}</style>
 
-      {/* NAV */}
-      <motion.header
-        initial={{ y: -20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className={"sticky top-0 z-50 border-b backdrop-blur-md " + t.navBg}
-      >
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2">
-            <span
-              className={
-                "flex h-7 w-7 items-center justify-center rounded-md border " +
-                (isDark
-                  ? "bg-white/10 border-white/20 text-white"
-                  : "bg-slate-900 border-slate-900 text-white")
-              }
-            >
-              <Icon name="loop" className="w-4 h-4" />
-            </span>
-            <span className="font-display font-semibold text-base tracking-tight">
-              LOOP
-            </span>
-          </div>
-
-          <nav
-            className={"hidden md:flex items-center gap-8 text-sm " + t.navText}
-          >
-            {NAV_LINKS.map((l) => (
-              <a
-                key={l}
-                href={"#" + l.toLowerCase()}
-                className={
-                  isDark
-                    ? "hover:text-white transition-colors"
-                    : "hover:text-slate-900 transition-colors"
-                }
-              >
-                {l}
-              </a>
-            ))}
-          </nav>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsDark((d) => !d)}
-              aria-label="Toggle theme"
-              className={
-                "flex h-8 w-8 items-center justify-center rounded-full border transition-colors " +
-                (isDark
-                  ? "border-white/15 text-slate-300 hover:bg-white/5"
-                  : "border-slate-200 text-slate-600 hover:bg-slate-50")
-              }
-            >
-              <Icon name={isDark ? "sun" : "moon"} className="w-4 h-4" />
-            </button>
-            <a
-              href="#"
-              className={"hidden sm:inline text-sm font-medium " + t.navText}
-            >
-              Login
-            </a>
-            <motion.a
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              href="#"
-              className={
-                "rounded-full text-sm font-medium px-4 py-2 transition-colors " +
-                t.primaryBtn
-              }
-            >
-              Sign up
-            </motion.a>
-          </div>
-        </div>
-      </motion.header>
+      <div className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-8">
+        <FloatingDock items={dockItems} />
+      </div>
 
       {/* HERO */}
       <section className="relative px-6 pt-24 pb-20 overflow-hidden">
