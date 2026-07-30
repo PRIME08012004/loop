@@ -336,7 +336,10 @@ export default function DashboardChat({ userName, initialChats }: { userName: st
             </div>
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-[#212121] via-[#212121] to-transparent px-4 pb-5 pt-10 dark:from-[#212121] md:left-64">
+          <div
+            className="fixed bottom-0 left-0 right-0 px-4 pb-5 pt-10 md:left-64"
+            style={{ backgroundImage: `linear-gradient(to top, ${isDark ? "#212121 72%, #212121 45%, transparent" : "#ffffff 72%, #ffffff 45%, transparent"})` }}
+          >
             <form onSubmit={askLoop} className="mx-auto flex max-w-3xl flex-col rounded-2xl border border-neutral-300 bg-white p-2 shadow-lg dark:border-neutral-700 dark:bg-[#303030]">
               {attachmentName && (
                 <div className="mb-1 flex w-fit max-w-full items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-100 px-2.5 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-800">

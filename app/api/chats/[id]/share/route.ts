@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth";
 import prisma from "@/lib/db";
 
 type Context = { params: Promise<{ id: string }> };

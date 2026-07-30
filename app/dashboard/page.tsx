@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth";
 import DashboardChat, { type StoredChat } from "@/components/dashboard-chat";
 import prisma from "@/lib/db";
 
