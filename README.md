@@ -2,6 +2,13 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### OpenRouter analysis setup
+
+To enable the dashboard&apos;s document analysis, copy `.env.example` to `.env` and add a
+server-side OpenRouter API key. The dashboard accepts CSV, TXT, Markdown, and PDF files up
+to 10 MB. The key is used only by the server-side `/api/analyze` route. It defaults to
+Google Gemini 2.5 Flash through OpenRouter; set `OPENROUTER_MODEL` to choose another model.
+
 First, run the development server:
 
 ```bash

@@ -490,7 +490,7 @@ export default function LoopLanding() {
     },
     { title: "Timeline", icon: <Icon name="trend" />, href: "#timeline" },
     { title: "Stack", icon: <Icon name="grid" />, href: "#stack" },
-    { title: "Login", icon: <Icon name="loop" />, href: "#" },
+    { title: "Open dashboard", icon: <Icon name="loop" />, href: "/dashboard" },
     { title: "Sign up", icon: <Icon name="plus" />, href: "#" },
     {
       title: isDark ? "Use light theme" : "Use dark theme",
@@ -581,7 +581,7 @@ export default function LoopLanding() {
             <motion.a
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              href="#"
+              href="/dashboard"
               className={
                 "rounded-full text-sm font-medium px-6 py-3 transition-colors " +
                 t.primaryBtn

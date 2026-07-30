@@ -1,0 +1,2 @@
+ALTER TABLE "Chat" ADD COLUMN IF NOT EXISTS "shareId" TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS "Chat_shareId_key" ON "Chat"("shareId");
