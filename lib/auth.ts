@@ -31,8 +31,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    session({ session, user }) {
+    async session({ session, user }) {
       session.user.id = user.id;
+      const dbUser = user as { role?: "ADMIN" | "ANALYST" | "VIEWER" };
+      session.user.role = dbUser.role ?? "VIEWER";
       return session;
     },
   },

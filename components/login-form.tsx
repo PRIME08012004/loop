@@ -1,8 +1,41 @@
 "use client";
 
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      />
+    </svg>
+  );
+}
+
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.35 6.84 9.7.5.1.68-.22.68-.48 0-.24-.01-.87-.01-1.7-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.55-1.14-4.55-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.31.1-2.73 0 0 .84-.27 2.75 1.05A9.3 9.3 0 0 1 12 6.84c.85 0 1.71.12 2.51.35 1.9-1.32 2.74-1.05 2.74-1.05.55 1.42.2 2.47.1 2.73.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .26.18.58.69.48A10.27 10.27 0 0 0 22 12.26C22 6.58 17.52 2 12 2z" />
+    </svg>
+  );
+}
 
 export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter();
@@ -11,14 +44,20 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [sending, setSending] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "github" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   async function emailSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSending(true);
     setMessage(null);
+
     if (isRegistering) {
-      const response = await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, password }) });
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
         setMessage(payload.error ?? "We could not create your account.");
@@ -26,33 +65,150 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
         return;
       }
     }
+
     const result = await signIn("credentials", { email, password, redirect: false });
     if (result?.error) setMessage("Incorrect email or password.");
     else router.push(callbackUrl);
     setSending(false);
   }
 
+  async function oauthSignIn(provider: "google" | "github") {
+    setOauthLoading(provider);
+    setMessage(null);
+    await signIn(provider, { callbackUrl });
+  }
+
+  const inputClass =
+    "mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm text-zinc-950 outline-none transition placeholder:text-zinc-400 focus:border-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:placeholder:text-zinc-500 dark:focus:border-zinc-300";
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-neutral-950 p-6 text-neutral-100">
-      <section className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6 shadow-2xl">
-        <p className="text-sm font-medium tracking-widest text-neutral-400">LOOP</p>
-        <h1 className="mt-4 text-2xl font-semibold">{isRegistering ? "Create your account" : "Welcome back"}</h1>
-        <p className="mt-2 text-sm text-neutral-400">{isRegistering ? "Use your email and password to start private conversations." : "Sign in to access your private feedback conversations."}</p>
-        <div className="mt-6 space-y-3">
-          <button onClick={() => signIn("google", { callbackUrl })} className="w-full rounded-xl bg-white px-4 py-3 text-sm font-medium text-neutral-900 transition hover:bg-neutral-200">Continue with Google</button>
-          <button onClick={() => signIn("github", { callbackUrl })} className="w-full rounded-xl border border-neutral-700 px-4 py-3 text-sm font-medium transition hover:bg-neutral-800">Continue with GitHub</button>
-        </div>
-        <div className="my-6 flex items-center gap-3 text-xs text-neutral-500"><span className="h-px flex-1 bg-neutral-800" />OR<span className="h-px flex-1 bg-neutral-800" /></div>
-        <form onSubmit={emailSignIn} className="space-y-3">
-          {isRegistering && <><label className="block text-sm" htmlFor="name">Name</label><input id="name" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-sm outline-none focus:border-neutral-400" /></>}
-          <label className="block text-sm" htmlFor="email">Email address</label>
-          <input id="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-sm outline-none focus:border-neutral-400" />
-          <label className="block text-sm" htmlFor="password">Password</label>
-          <input id="password" type="password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-sm outline-none focus:border-neutral-400" />
-          <button disabled={sending} type="submit" className="w-full rounded-xl bg-neutral-100 px-4 py-3 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:opacity-50">{sending ? "Please wait…" : isRegistering ? "Create account" : "Sign in with email"}</button>
+    <main className="relative flex min-h-screen items-center justify-center bg-zinc-50 px-6 py-10 text-zinc-950 transition-colors dark:bg-black dark:text-white">
+      <div className="absolute right-6 top-6">
+        <ThemeToggle />
+      </div>
+
+      <section className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.25)] dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_24px_60px_-32px_rgba(0,0,0,0.8)]">
+        <Link href="/" className="inline-flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-950 text-xs font-semibold text-white dark:bg-white dark:text-zinc-950">
+            L
+          </span>
+          <span
+            className="text-sm font-semibold tracking-tight"
+            style={{ fontFamily: "var(--font-display), system-ui" }}
+          >
+            LOOP
+          </span>
+        </Link>
+
+        <h1
+          className="mt-8 text-2xl font-semibold tracking-tight"
+          style={{ fontFamily: "var(--font-display), system-ui" }}
+        >
+          {isRegistering ? "Create your account" : "Welcome back"}
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+          {isRegistering
+            ? "Set up your workspace and start understanding customer feedback."
+            : "Sign in to your dashboard, inbox, and Ask LOOP chats."}
+        </p>
+
+        <form onSubmit={emailSignIn} className="mt-8 space-y-4">
+          {isRegistering && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300" htmlFor="name">
+                Name
+              </label>
+              <input
+                id="name"
+                required
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Your name"
+                className={inputClass}
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300" htmlFor="email">
+              Email address
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300" htmlFor="password">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              minLength={8}
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="At least 8 characters"
+              className={inputClass}
+            />
+          </div>
+          <button
+            disabled={sending || oauthLoading !== null}
+            type="submit"
+            className="w-full rounded-xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            {sending ? "Please wait…" : isRegistering ? "Create account" : "Sign in with email"}
+          </button>
         </form>
-        {message && <p className="mt-4 text-sm text-neutral-400">{message}</p>}
-        <button onClick={() => { setIsRegistering((value) => !value); setMessage(null); }} className="mt-5 w-full text-sm text-neutral-400 underline underline-offset-4 hover:text-white">{isRegistering ? "Already have an account? Sign in" : "New here? Create an account"}</button>
+
+        {message && (
+          <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+            {message}
+          </p>
+        )}
+
+        <div className="my-6 flex items-center gap-3 text-xs text-zinc-400">
+          <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+          Or continue with
+          <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+        </div>
+
+        <div className="space-y-3">
+          <button
+            type="button"
+            disabled={sending || oauthLoading !== null}
+            onClick={() => void oauthSignIn("google")}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-950 transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-900"
+          >
+            <GoogleIcon className="h-5 w-5" />
+            {oauthLoading === "google" ? "Redirecting…" : "Continue with Google"}
+          </button>
+          <button
+            type="button"
+            disabled={sending || oauthLoading !== null}
+            onClick={() => void oauthSignIn("github")}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-950 transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-900"
+          >
+            <GitHubIcon className="h-5 w-5" />
+            {oauthLoading === "github" ? "Redirecting…" : "Continue with GitHub"}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setIsRegistering((value) => !value);
+            setMessage(null);
+          }}
+          className="mt-6 w-full text-center text-sm text-zinc-500 transition hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white"
+        >
+          {isRegistering ? "Already have an account? Sign in" : "New here? Create an account"}
+        </button>
       </section>
     </main>
   );

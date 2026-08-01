@@ -8,17 +8,18 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String      @id @default(cuid())
   name          String?
-  email         String?   @unique
+  email         String?     @unique
   passwordHash  String?
   emailVerified DateTime?
   image         String?
-  role          Role      @default(VIEWER)
-  createdAt     DateTime  @default(now())
+  role          Role        @default(VIEWER)
+  createdAt     DateTime    @default(now())
   accounts      Account[]
   sessions      Session[]
   chats         Chat[]
+  memberships   OrgMember[]
 }
 
 model Account {
@@ -57,6 +58,83 @@ model VerificationToken {
   @@id([identifier, token])
 }
 
+model Organization {
+  id           String           @id @default(cuid())
+  name         String
+  slug         String           @unique
+  createdAt    DateTime         @default(now())
+  members      OrgMember[]
+  invites      OrgInvite[]
+  feedback     FeedbackItem[]
+  integrations AppIntegration[]
+}
+
+model OrgMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgRole      @default(VIEWER)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model OrgInvite {
+  id             String       @id @default(cuid())
+  organizationId String
+  email          String
+  role           OrgRole      @default(ANALYST)
+  invitedById    String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, email])
+  @@index([email])
+}
+
+model FeedbackItem {
+  id             String         @id @default(cuid())
+  organizationId String
+  source         FeedbackSource
+  externalId     String?
+  content        String         @db.Text
+  channel        String
+  rating         Int?
+  sentiment      Sentiment?
+  status         FeedbackStatus @default(new)
+  reviewedAt     DateTime?
+  ingestedAt     DateTime       @default(now())
+  rawPayload     Json?
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, source, externalId])
+  @@index([organizationId, ingestedAt])
+  @@index([organizationId, sentiment])
+}
+
+model AppIntegration {
+  id             String              @id @default(cuid())
+  organizationId String
+  provider       IntegrationProvider
+  packageName    String?
+  accessToken    String?             @db.Text
+  refreshToken   String?             @db.Text
+  tokenExpiresAt DateTime?
+  status         IntegrationStatus   @default(ACTIVE)
+  lastPolledAt   DateTime?
+  lastPollError  String?             @db.Text
+  metadata       Json?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider])
+  @@index([provider, status])
+}
+
 model Chat {
   id         String        @id @default(cuid())
   userId     String
@@ -87,4 +165,40 @@ enum Role {
   ADMIN
   ANALYST
   VIEWER
+}
+
+enum OrgRole {
+  OWNER
+  ANALYST
+  VIEWER
+}
+
+enum FeedbackSource {
+  GOOGLE_PLAY
+  APP_STORE
+  CSV
+  MANUAL
+}
+
+enum Sentiment {
+  POSITIVE
+  NEGATIVE
+  NEUTRAL
+}
+
+enum FeedbackStatus {
+  new
+  reviewed
+  actioned
+}
+
+enum IntegrationProvider {
+  GOOGLE_PLAY
+  APP_STORE
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  ERROR
+  DISCONNECTED
 }
