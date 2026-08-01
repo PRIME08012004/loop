@@ -1,10 +1,23 @@
 import Link from "next/link";
 import TeamSettings from "@/components/team-settings";
 import { requireOrgOwner } from "@/lib/dashboard-session";
-import { ROLE_LABELS } from "@/lib/permissions";
+import prisma from "@/lib/db";
+import { ROLE_LABELS, type OrgRole } from "@/lib/permissions";
 
 export default async function SettingsPage() {
-  const { userName, orgRole, organizationName } = await requireOrgOwner();
+  const { userName, orgRole, organizationName, organizationId } = await requireOrgOwner();
+
+  const [members, invites] = await Promise.all([
+    prisma.orgMember.findMany({
+      where: { organizationId },
+      include: { user: { select: { id: true, name: true, email: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.orgInvite.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -38,7 +51,20 @@ export default async function SettingsPage() {
         </Link>
       </div>
 
-      <TeamSettings />
+      <TeamSettings
+        initialMembers={members.map((member) => ({
+          id: member.id,
+          userId: member.userId,
+          name: member.user.name,
+          email: member.user.email,
+          role: member.role as OrgRole,
+        }))}
+        initialInvites={invites.map((invite) => ({
+          id: invite.id,
+          email: invite.email,
+          role: invite.role as OrgRole,
+        }))}
+      />
     </div>
   );
 }

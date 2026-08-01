@@ -30,12 +30,12 @@ export function canEditFeedbackStatus(role: OrgRole) {
   return role === "OWNER" || role === "ANALYST";
 }
 
-export function canUseAskLoop(_role: OrgRole) {
-  return true;
+export function canUseAskLoop(role: OrgRole) {
+  return role === "OWNER" || role === "ANALYST" || role === "VIEWER";
 }
 
-export function canViewDashboard(_role: OrgRole) {
-  return true;
+export function canViewDashboard(role: OrgRole) {
+  return role === "OWNER" || role === "ANALYST" || role === "VIEWER";
 }
 
 // Backward compat alias

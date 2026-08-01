@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type Integration = {
   provider: string;
@@ -13,23 +13,27 @@ type Integration = {
   hasTokens: boolean;
 };
 
+function oauthMessageFromParams(searchParams: URLSearchParams) {
+  if (searchParams.get("connected") === "google_play") {
+    return "Google Play connected. Enter your package name below.";
+  }
+  const error = searchParams.get("error");
+  if (error) return `Connection failed: ${error}`;
+  return null;
+}
+
 export default function IntegrationsSettings({ initialIntegration }: { initialIntegration: Integration | null }) {
   const searchParams = useSearchParams();
   const [integration, setIntegration] = useState(initialIntegration);
   const [packageName, setPackageName] = useState(initialIntegration?.packageName ?? "");
-  const [message, setMessage] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const connected = searchParams.get("connected");
-    const error = searchParams.get("error");
-    if (connected === "google_play") setMessage("Google Play connected. Enter your package name below.");
-    if (error) setMessage(`Connection failed: ${error}`);
-  }, [searchParams]);
+  const message = actionMessage ?? oauthMessageFromParams(searchParams);
 
   const savePackage = async () => {
     setSaving(true);
-    setMessage(null);
+    setActionMessage(null);
     const response = await fetch("/api/integrations/google-play", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -38,7 +42,7 @@ export default function IntegrationsSettings({ initialIntegration }: { initialIn
     const payload = (await response.json()) as { error?: string; packageName?: string };
     setSaving(false);
     if (!response.ok) {
-      setMessage(payload.error ?? "Could not save package name.");
+      setActionMessage(payload.error ?? "Could not save package name.");
       return;
     }
     setIntegration((prev) => ({
@@ -49,14 +53,14 @@ export default function IntegrationsSettings({ initialIntegration }: { initialIn
       lastPollError: null,
       hasTokens: true,
     }));
-    setMessage("Package name saved. Reviews will sync every 15 minutes.");
+    setActionMessage("Package name saved. Reviews will sync every 15 minutes.");
   };
 
   const disconnect = async () => {
     await fetch("/api/integrations/google-play", { method: "DELETE" });
     setIntegration(null);
     setPackageName("");
-    setMessage("Google Play disconnected.");
+    setActionMessage("Google Play disconnected.");
   };
 
   return (

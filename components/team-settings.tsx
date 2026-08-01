@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { OrgRole } from "@/lib/permissions";
 import { ROLE_LABELS } from "@/lib/permissions";
 
 type Member = { id: string; userId: string; name: string | null; email: string | null; role: OrgRole };
 type Invite = { id: string; email: string; role: OrgRole };
 
-export default function TeamSettings() {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [invites, setInvites] = useState<Invite[]>([]);
+export default function TeamSettings({
+  initialMembers,
+  initialInvites,
+}: {
+  initialMembers: Member[];
+  initialInvites: Invite[];
+}) {
+  const [members, setMembers] = useState(initialMembers);
+  const [invites, setInvites] = useState(initialInvites);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgRole>("ANALYST");
   const [message, setMessage] = useState<string | null>(null);
@@ -21,10 +27,6 @@ export default function TeamSettings() {
     setMembers(payload.members ?? []);
     setInvites(payload.invites ?? []);
   };
-
-  useEffect(() => {
-    void load();
-  }, []);
 
   const invite = async () => {
     setMessage(null);
@@ -94,8 +96,8 @@ export default function TeamSettings() {
         <div className="mt-4">
           <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Pending invites</p>
           <ul className="mt-2 space-y-1 text-sm text-slate-500">
-            {invites.map((invite) => (
-              <li key={invite.id}>{invite.email} — {ROLE_LABELS[invite.role]}</li>
+            {invites.map((pending) => (
+              <li key={pending.id}>{pending.email} — {ROLE_LABELS[pending.role]}</li>
             ))}
           </ul>
         </div>
