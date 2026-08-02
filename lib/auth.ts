@@ -8,7 +8,8 @@ import prisma from "@/lib/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma as never),
-  session: { strategy: "database" },
+  // Credentials require JWT sessions; database strategy never persists a credentials login.
+  session: { strategy: "jwt" },
   providers: [
     Google,
     GitHub,
@@ -26,15 +27,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user?.passwordHash || !(await compare(password, user.passwordHash))) return null;
 
-        return { id: user.id, name: user.name, email: user.email, image: user.image };
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+        };
       },
     }),
   ],
   callbacks: {
-    async session({ session, user }) {
-      session.user.id = user.id;
-      const dbUser = user as { role?: "ADMIN" | "ANALYST" | "VIEWER" };
-      session.user.role = dbUser.role ?? "VIEWER";
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        const role = (user as { role?: "ADMIN" | "ANALYST" | "VIEWER" }).role;
+        token.role = role ?? "VIEWER";
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = typeof token.id === "string" ? token.id : (token.sub ?? "");
+        session.user.role = (token.role as "ADMIN" | "ANALYST" | "VIEWER" | undefined) ?? "VIEWER";
+      }
       return session;
     },
   },

@@ -67,8 +67,13 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
     }
 
     const result = await signIn("credentials", { email, password, redirect: false });
-    if (result?.error) setMessage("Incorrect email or password.");
-    else router.push(callbackUrl);
+    if (result?.error) {
+      setMessage("Incorrect email or password.");
+      setSending(false);
+      return;
+    }
+    router.push(callbackUrl);
+    router.refresh();
     setSending(false);
   }
 
