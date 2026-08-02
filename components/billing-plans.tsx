@@ -6,8 +6,6 @@ import { formatInr, PAID_PLANS, type PlanId } from "@/lib/plans";
 type BillingProps = {
   currentPlan: PlanId;
   planExpiresAt: string | null;
-  askLoopUsed: number;
-  askLoopLimit: number;
 };
 
 declare global {
@@ -30,7 +28,7 @@ function loadRazorpayScript() {
   });
 }
 
-export default function BillingPlans({ currentPlan, planExpiresAt, askLoopUsed, askLoopLimit }: BillingProps) {
+export default function BillingPlans({ currentPlan, planExpiresAt }: BillingProps) {
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -116,9 +114,6 @@ export default function BillingPlans({ currentPlan, planExpiresAt, askLoopUsed, 
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Current plan: <span className="font-medium text-zinc-950 dark:text-white">{currentPlan}</span>
             {planExpiresAt ? ` · renews/ends ${new Date(planExpiresAt).toLocaleDateString("en-IN")}` : null}
-          </p>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Ask LOOP usage: {askLoopUsed} / {askLoopLimit} this month
           </p>
         </div>
       </div>

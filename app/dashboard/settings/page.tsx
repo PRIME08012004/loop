@@ -1,17 +1,18 @@
 import Link from "next/link";
 import BillingPlans from "@/components/billing-plans";
 import { LoopIcon } from "@/components/loop-icons";
+import PlanUsagePanel from "@/components/plan-usage";
 import TeamSettings from "@/components/team-settings";
-import { currentMonthKey } from "@/lib/billing";
 import { requireOrgOwner } from "@/lib/dashboard-session";
 import { canAccessFeature, getPlan, type PlanId } from "@/lib/plans";
+import { getPlanUsage } from "@/lib/plan-usage";
 import prisma from "@/lib/db";
 import { ROLE_LABELS, type OrgRole } from "@/lib/permissions";
 
 export default async function SettingsPage() {
   const { userName, orgRole, organizationName, organizationId } = await requireOrgOwner();
 
-  const [members, invites, organization] = await Promise.all([
+  const [members, invites, organization, usage] = await Promise.all([
     prisma.orgMember.findMany({
       where: { organizationId },
       include: { user: { select: { id: true, name: true, email: true } } },
@@ -26,16 +27,13 @@ export default async function SettingsPage() {
       select: {
         plan: true,
         planExpiresAt: true,
-        askLoopUsedThisMonth: true,
-        askLoopMonthKey: true,
       },
     }),
+    getPlanUsage(organizationId),
   ]);
 
   const plan = organization.plan as PlanId;
   const planDef = getPlan(plan);
-  const askLoopUsed =
-    organization.askLoopMonthKey === currentMonthKey() ? organization.askLoopUsedThisMonth : 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -43,11 +41,11 @@ export default async function SettingsPage() {
         Manage {organizationName} — billing, team access, integrations, and workspace settings.
       </p>
 
+      <PlanUsagePanel usage={usage} />
+
       <BillingPlans
         currentPlan={plan}
         planExpiresAt={organization.planExpiresAt?.toISOString() ?? null}
-        askLoopUsed={askLoopUsed}
-        askLoopLimit={planDef.limits.askLoopPerMonth}
       />
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">

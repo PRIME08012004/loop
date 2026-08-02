@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { analysisModelForPlan, openRouterChat } from "@/lib/ai/openrouter";
 import { reportSystemPrompt } from "@/lib/ai/prompts";
+import { consumeReportCredit } from "@/lib/billing";
 import { assertPlanFeature, requireApiSession } from "@/lib/dashboard-session";
 import { canExportReports } from "@/lib/permissions";
-import { getPlan, type PlanId } from "@/lib/plans";
+import type { PlanId } from "@/lib/plans";
 import prisma from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -111,17 +112,7 @@ export async function POST() {
   const planGate = assertPlanFeature(result.ctx, "reports");
   if ("error" in planGate) return planGate.error;
 
-  const organization = await prisma.organization.findUnique({
-    where: { id: organizationId },
-    select: { plan: true },
-  });
-  const plan = (organization?.plan ?? "FREE") as PlanId;
-  if (getPlan(plan).limits.reportsPerMonth <= 0) {
-    return NextResponse.json(
-      { error: "Reports require a Beginner plan or higher. Upgrade in Settings → Billing." },
-      { status: 402 },
-    );
-  }
+  const plan = result.ctx.effectivePlan as PlanId;
 
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   let items = await prisma.feedbackItem.findMany({
@@ -148,6 +139,11 @@ export async function POST() {
       },
       { status: 400 },
     );
+  }
+
+  const credit = await consumeReportCredit(organizationId, plan);
+  if (!credit.ok) {
+    return NextResponse.json({ error: credit.reason }, { status: 402 });
   }
 
   const positive = items.filter((item) => item.sentiment === "POSITIVE").length;
@@ -191,7 +187,11 @@ export async function POST() {
 
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ report: fallback, organizationName });
+    return NextResponse.json({
+      report: fallback,
+      organizationName,
+      usage: { used: credit.used, limit: credit.limit },
+    });
   }
 
   const model = analysisModelForPlan(plan);
@@ -230,12 +230,21 @@ ${sampleLines}`,
 
     const payload = (await response.json()) as OpenRouterResponse;
     if (!response.ok) {
-      return NextResponse.json({ report: fallback, organizationName, warning: payload.error?.message });
+      return NextResponse.json({
+        report: fallback,
+        organizationName,
+        warning: payload.error?.message,
+        usage: { used: credit.used, limit: credit.limit },
+      });
     }
 
     const parsed = extractJsonObject(payload.choices?.[0]?.message?.content ?? "");
     if (!parsed) {
-      return NextResponse.json({ report: fallback, organizationName });
+      return NextResponse.json({
+        report: fallback,
+        organizationName,
+        usage: { used: credit.used, limit: credit.limit },
+      });
     }
 
     const themes = Array.isArray(parsed.themes)
@@ -252,8 +261,13 @@ ${sampleLines}`,
     return NextResponse.json({
       report: { ...fallback, summary, themes, recommendedActions },
       organizationName,
+      usage: { used: credit.used, limit: credit.limit },
     });
   } catch {
-    return NextResponse.json({ report: fallback, organizationName });
+    return NextResponse.json({
+      report: fallback,
+      organizationName,
+      usage: { used: credit.used, limit: credit.limit },
+    });
   }
 }

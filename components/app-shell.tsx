@@ -49,6 +49,7 @@ export default function AppShell({
   plan,
   planExpiresAt,
   hasActivePlan,
+  usageSummary,
 }: {
   children: React.ReactNode;
   userName: string;
@@ -56,6 +57,12 @@ export default function AppShell({
   plan: PlanId;
   planExpiresAt: string | null;
   hasActivePlan: boolean;
+  usageSummary: {
+    askUsed: number;
+    askLimit: number;
+    feedbackUsed: number;
+    feedbackLimit: number;
+  };
 }) {
   const pathname = usePathname();
   const title = pageTitle(pathname);
@@ -125,6 +132,17 @@ export default function AppShell({
                 {plan} plan
               </div>
             )}
+            <Link
+              href="/dashboard/settings#usage"
+              className="block rounded-lg px-2.5 py-2 text-[11px] leading-relaxed text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+            >
+              <p className="tabular-nums">
+                Ask LOOP {usageSummary.askUsed}/{usageSummary.askLimit}
+              </p>
+              <p className="tabular-nums">
+                Feedback {usageSummary.feedbackUsed}/{usageSummary.feedbackLimit}
+              </p>
+            </Link>
             <div className="rounded-lg px-2.5 py-2 text-xs text-zinc-400 dark:text-zinc-500">
               <p className="truncate font-medium text-zinc-700 dark:text-zinc-300">{userName}</p>
               <p>{ROLE_LABELS[userRole]}</p>

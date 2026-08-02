@@ -4,6 +4,13 @@ import AppShell from "@/components/app-shell";
 import type { AppRole } from "@/lib/permissions";
 import type { PlanId } from "@/lib/plans";
 
+export type SidebarUsageSummary = {
+  askUsed: number;
+  askLimit: number;
+  feedbackUsed: number;
+  feedbackLimit: number;
+};
+
 export default function DashboardLayoutClient({
   children,
   userName,
@@ -11,6 +18,7 @@ export default function DashboardLayoutClient({
   plan,
   planExpiresAt,
   hasActivePlan,
+  usageSummary,
 }: {
   children: React.ReactNode;
   userName: string;
@@ -18,6 +26,7 @@ export default function DashboardLayoutClient({
   plan: PlanId;
   planExpiresAt: string | null;
   hasActivePlan: boolean;
+  usageSummary: SidebarUsageSummary;
 }) {
   return (
     <AppShell
@@ -26,6 +35,7 @@ export default function DashboardLayoutClient({
       plan={plan}
       planExpiresAt={planExpiresAt}
       hasActivePlan={hasActivePlan}
+      usageSummary={usageSummary}
     >
       {children}
     </AppShell>

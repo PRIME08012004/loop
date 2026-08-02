@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertPlanFeature, requireApiSession } from "@/lib/dashboard-session";
 import { getOrgFeedback } from "@/lib/feedback-query";
+import { getPlan } from "@/lib/plans";
 import { parseCsv } from "@/lib/parse-csv";
 import prisma from "@/lib/db";
 import { quickSentiment } from "@/lib/sentiment";
@@ -22,7 +23,20 @@ export async function POST(request: Request) {
   const planGate = assertPlanFeature(result.ctx, "inbox");
   if ("error" in planGate) return planGate.error;
 
-  const { organizationId } = result.ctx;
+  const { organizationId, effectivePlan } = result.ctx;
+  const feedbackLimit = getPlan(effectivePlan).limits.feedbackItems;
+  const currentCount = await prisma.feedbackItem.count({ where: { organizationId } });
+  const remaining = Math.max(0, feedbackLimit - currentCount);
+  if (remaining <= 0) {
+    return NextResponse.json(
+      {
+        error: `Your ${getPlan(effectivePlan).name} plan allows ${feedbackLimit} feedback items. Delete older items or upgrade to add more.`,
+        upgradeUrl: "/dashboard/settings#billing",
+      },
+      { status: 402 },
+    );
+  }
+
   const body = (await request.json()) as { csv?: string; sourceName?: string };
 
   const csv = typeof body.csv === "string" ? body.csv : "";
@@ -30,7 +44,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "CSV content is required." }, { status: 400 });
   }
 
-  const rows = parseCsv(csv).slice(0, MAX_CSV_ROWS);
+  const parsed = parseCsv(csv);
+  const rows = parsed.slice(0, Math.min(MAX_CSV_ROWS, remaining));
   if (!rows.length) {
     return NextResponse.json({ error: "No feedback rows found in CSV." }, { status: 400 });
   }
@@ -51,7 +66,6 @@ export async function POST(request: Request) {
     };
   });
 
-  // Fast bulk insert — skip duplicates instead of classifying each row with AI
   await prisma.feedbackItem.createMany({
     data,
     skipDuplicates: true,
@@ -60,6 +74,7 @@ export async function POST(request: Request) {
   const feedback = await getOrgFeedback(organizationId, 200);
   return NextResponse.json({
     created: data.length,
+    truncated: parsed.length > rows.length,
     feedback,
     sourceName: body.sourceName ?? "Pasted CSV",
   });

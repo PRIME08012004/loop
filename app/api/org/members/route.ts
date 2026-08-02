@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOrgOwner } from "@/lib/dashboard-session";
-import { canAccessFeature } from "@/lib/plans";
+import { canAccessFeature, getPlan } from "@/lib/plans";
 import prisma from "@/lib/db";
 import type { OrgRole } from "@/lib/permissions";
 
@@ -42,7 +42,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const { organizationId, userId } = ctx;
+  const { organizationId, userId, effectivePlan } = ctx;
+  const memberLimit = getPlan(effectivePlan).limits.members;
+  const memberCount = await prisma.orgMember.count({ where: { organizationId } });
+  if (memberCount >= memberLimit) {
+    return NextResponse.json(
+      {
+        error: `Your ${getPlan(effectivePlan).name} plan allows ${memberLimit} team member${memberLimit === 1 ? "" : "s"}. Upgrade to invite more.`,
+        upgradeUrl: "/dashboard/settings#billing",
+      },
+      { status: 402 },
+    );
+  }
+
   const body = (await request.json()) as { email?: string; role?: string };
 
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";

@@ -109,3 +109,43 @@ export async function consumeAskLoopCredit(organizationId: string, plan: PlanId)
 
   return { ok: true as const, used: used + 1, limit };
 }
+
+export async function consumeReportCredit(organizationId: string, plan: PlanId) {
+  const limit = getPlan(plan).limits.reportsPerMonth;
+  const monthKey = currentMonthKey();
+
+  if (limit <= 0) {
+    return {
+      ok: false as const,
+      reason: `Reports require a Beginner plan or higher. Upgrade for report capacity.`,
+      used: 0,
+      limit: 0,
+    };
+  }
+
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { reportsUsedThisMonth: true, reportsMonthKey: true },
+  });
+  if (!org) return { ok: false as const, reason: "Organization not found." };
+
+  const used = org.reportsMonthKey === monthKey ? org.reportsUsedThisMonth : 0;
+  if (used >= limit) {
+    return {
+      ok: false as const,
+      reason: `You have used all ${limit} reports on your ${getPlan(plan).name} plan this month. Upgrade for more capacity.`,
+      used,
+      limit,
+    };
+  }
+
+  await prisma.organization.update({
+    where: { id: organizationId },
+    data: {
+      reportsMonthKey: monthKey,
+      reportsUsedThisMonth: used + 1,
+    },
+  });
+
+  return { ok: true as const, used: used + 1, limit };
+}

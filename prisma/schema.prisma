@@ -68,6 +68,8 @@ model Organization {
   razorpayOrderId      String?
   askLoopUsedThisMonth Int              @default(0)
   askLoopMonthKey      String?
+  reportsUsedThisMonth Int              @default(0)
+  reportsMonthKey      String?
   createdAt            DateTime         @default(now())
   members              OrgMember[]
   invites              OrgInvite[]
