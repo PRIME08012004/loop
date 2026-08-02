@@ -1,9 +1,16 @@
 import AskLoopChat, { type StoredChat } from "@/components/ask-loop-chat";
+import FeatureLock from "@/components/feature-lock";
 import { requireDashboardSession } from "@/lib/dashboard-session";
+import { canAccessFeature, type PlanId } from "@/lib/plans";
 import prisma from "@/lib/db";
 
 export default async function AskPage() {
-  const { userId, userName, organizationId } = await requireDashboardSession();
+  const { userId, userName, organizationId, plan, planExpiresAt, effectivePlan } =
+    await requireDashboardSession();
+
+  if (!canAccessFeature(plan, planExpiresAt, "ask")) {
+    return <FeatureLock feature="ask" currentPlan={effectivePlan as PlanId} />;
+  }
 
   const [storedChats, orgFeedback] = await Promise.all([
     prisma.chat.findMany({

@@ -6,6 +6,11 @@ import { signOut } from "next-auth/react";
 import { LoopIcon } from "@/components/loop-icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
+  canAccessFeature,
+  type PlanFeature,
+  type PlanId,
+} from "@/lib/plans";
+import {
   canExportReports,
   canManageWorkspace,
   ROLE_LABELS,
@@ -16,16 +21,17 @@ interface NavItem {
   label: string;
   href: string;
   icon: Parameters<typeof LoopIcon>[0]["name"];
+  feature: PlanFeature;
   requires?: (role: AppRole) => boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: "grid" },
-  { label: "Inbox", href: "/dashboard/inbox", icon: "inbox" },
-  { label: "Trends", href: "/dashboard/trends", icon: "trend" },
-  { label: "Ask LOOP", href: "/dashboard/ask", icon: "chat" },
-  { label: "Reports", href: "/dashboard/reports", icon: "report", requires: canExportReports },
-  { label: "Settings", href: "/dashboard/settings", icon: "settings", requires: canManageWorkspace },
+  { label: "Dashboard", href: "/dashboard", icon: "grid", feature: "dashboard" },
+  { label: "Inbox", href: "/dashboard/inbox", icon: "inbox", feature: "inbox" },
+  { label: "Trends", href: "/dashboard/trends", icon: "trend", feature: "trends" },
+  { label: "Ask LOOP", href: "/dashboard/ask", icon: "chat", feature: "ask" },
+  { label: "Reports", href: "/dashboard/reports", icon: "report", feature: "reports", requires: canExportReports },
+  { label: "Settings", href: "/dashboard/settings", icon: "settings", feature: "settings", requires: canManageWorkspace },
 ];
 
 function pageTitle(pathname: string) {
@@ -40,10 +46,16 @@ export default function AppShell({
   children,
   userName,
   userRole,
+  plan,
+  planExpiresAt,
+  hasActivePlan,
 }: {
   children: React.ReactNode;
   userName: string;
   userRole: AppRole;
+  plan: PlanId;
+  planExpiresAt: string | null;
+  hasActivePlan: boolean;
 }) {
   const pathname = usePathname();
   const title = pageTitle(pathname);
@@ -77,24 +89,42 @@ export default function AppShell({
               const active =
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
+              const unlocked = canAccessFeature(plan, planExpiresAt, item.feature);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  title={unlocked ? item.label : `${item.label} — upgrade to unlock`}
                   className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
                     active
                       ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
-                      : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+                      : unlocked
+                        ? "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+                        : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:text-zinc-600 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
                   }`}
                 >
-                  <LoopIcon name={item.icon} className="h-4 w-4" />
-                  {item.label}
+                  <LoopIcon name={item.icon} className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {!unlocked ? <LoopIcon name="lock" className="h-3.5 w-3.5 shrink-0 opacity-70" /> : null}
                 </Link>
               );
             })}
           </nav>
 
           <div className="mt-4 shrink-0 space-y-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+            {!hasActivePlan ? (
+              <Link
+                href="/dashboard/settings#billing"
+                className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-xs font-medium text-zinc-700 transition hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-700"
+              >
+                <LoopIcon name="lock" className="h-3.5 w-3.5" />
+                Unlock full LOOP
+              </Link>
+            ) : (
+              <div className="rounded-lg px-2.5 py-1.5 text-[11px] uppercase tracking-wide text-zinc-400">
+                {plan} plan
+              </div>
+            )}
             <div className="rounded-lg px-2.5 py-2 text-xs text-zinc-400 dark:text-zinc-500">
               <p className="truncate font-medium text-zinc-700 dark:text-zinc-300">{userName}</p>
               <p>{ROLE_LABELS[userRole]}</p>
@@ -112,12 +142,17 @@ export default function AppShell({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 bg-white/90 px-4 backdrop-blur dark:border-zinc-800 dark:bg-black/90 md:px-6">
-            <h1
-              className="text-lg font-semibold tracking-tight"
-              style={{ fontFamily: "var(--font-display), system-ui" }}
-            >
-              {title}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1
+                className="text-lg font-semibold tracking-tight"
+                style={{ fontFamily: "var(--font-display), system-ui" }}
+              >
+                {title}
+              </h1>
+              {!hasActivePlan && title !== "Dashboard" && title !== "Settings" ? (
+                <LoopIcon name="lock" className="h-4 w-4 text-zinc-400" />
+              ) : null}
+            </div>
             <div className="flex items-center gap-1">
               <div className="md:hidden">
                 <ThemeToggle />

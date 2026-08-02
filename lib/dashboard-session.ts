@@ -4,6 +4,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/db";
 import { ensureUserOrganization } from "@/lib/org";
+import {
+  canAccessFeature,
+  effectivePlan,
+  hasActivePaidPlan,
+  type PlanFeature,
+  type PlanId,
+} from "@/lib/plans";
 import type { OrgRole } from "@/lib/permissions";
 
 const ORG_COOKIE = "loop-org-id";
@@ -31,6 +38,14 @@ async function resolveOrgSession(userId: string, name?: string | null, email?: s
     }
   }
 
+  const organization = await prisma.organization.findUniqueOrThrow({
+    where: { id: organizationId },
+    select: { plan: true, planExpiresAt: true },
+  });
+
+  const plan = organization.plan as PlanId;
+  const planExpiresAt = organization.planExpiresAt;
+
   return {
     userId,
     userName: name ?? email ?? "there",
@@ -39,6 +54,10 @@ async function resolveOrgSession(userId: string, name?: string | null, email?: s
     organizationName,
     orgRole,
     userRole: orgRole,
+    plan,
+    planExpiresAt,
+    effectivePlan: effectivePlan(plan, planExpiresAt),
+    hasActivePlan: hasActivePaidPlan(plan, planExpiresAt),
   };
 }
 
@@ -92,6 +111,27 @@ export async function requireOrgOwner() {
 
 export async function requireOrgMember() {
   return requireDashboardSession();
+}
+
+export function planAccessError(feature: PlanFeature) {
+  return NextResponse.json(
+    {
+      error: "Upgrade your plan to use this feature.",
+      feature,
+      upgradeUrl: "/dashboard/settings#billing",
+    },
+    { status: 402 },
+  );
+}
+
+export function assertPlanFeature(
+  ctx: { plan: PlanId; planExpiresAt: Date | null },
+  feature: PlanFeature,
+) {
+  if (!canAccessFeature(ctx.plan, ctx.planExpiresAt, feature)) {
+    return { error: planAccessError(feature) };
+  }
+  return { ok: true as const };
 }
 
 export { ORG_COOKIE };

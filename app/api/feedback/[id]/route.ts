@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { requireDashboardSession } from "@/lib/dashboard-session";
 import { canEditFeedbackStatus } from "@/lib/permissions";
+import { canAccessFeature } from "@/lib/plans";
 import prisma from "@/lib/db";
 
 const STATUSES = new Set(["new", "reviewed", "actioned"]);
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { organizationId, orgRole } = await requireDashboardSession();
+  const ctx = await requireDashboardSession();
+  const { organizationId, orgRole, plan, planExpiresAt } = ctx;
+  if (!canAccessFeature(plan, planExpiresAt, "inbox")) {
+    return NextResponse.json(
+      { error: "Upgrade your plan to manage inbox items.", upgradeUrl: "/dashboard/settings#billing" },
+      { status: 402 },
+    );
+  }
   if (!canEditFeedbackStatus(orgRole)) {
     return NextResponse.json({ error: "You do not have permission to update feedback." }, { status: 403 });
   }

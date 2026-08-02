@@ -59,14 +59,38 @@ model VerificationToken {
 }
 
 model Organization {
-  id           String           @id @default(cuid())
-  name         String
-  slug         String           @unique
-  createdAt    DateTime         @default(now())
-  members      OrgMember[]
-  invites      OrgInvite[]
-  feedback     FeedbackItem[]
-  integrations AppIntegration[]
+  id                   String           @id @default(cuid())
+  name                 String
+  slug                 String           @unique
+  plan                 Plan             @default(FREE)
+  planExpiresAt        DateTime?
+  razorpayCustomerId   String?
+  razorpayOrderId      String?
+  askLoopUsedThisMonth Int              @default(0)
+  askLoopMonthKey      String?
+  createdAt            DateTime         @default(now())
+  members              OrgMember[]
+  invites              OrgInvite[]
+  feedback             FeedbackItem[]
+  integrations         AppIntegration[]
+  payments             Payment[]
+}
+
+model Payment {
+  id                     String       @id @default(cuid())
+  organizationId         String
+  plan                   Plan
+  amountPaise            Int
+  currency               String       @default("INR")
+  status                 PaymentStatus @default(CREATED)
+  razorpayOrderId        String       @unique
+  razorpayPaymentId      String?      @unique
+  razorpaySignature      String?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
 }
 
 model OrgMember {
@@ -165,6 +189,19 @@ enum Role {
   ADMIN
   ANALYST
   VIEWER
+}
+
+enum Plan {
+  FREE
+  BEGINNER
+  ADVANCED
+  PRO
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
 }
 
 enum OrgRole {

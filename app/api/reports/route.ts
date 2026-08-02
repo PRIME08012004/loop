@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireApiSession } from "@/lib/dashboard-session";
+import { analysisModelForPlan, openRouterChat } from "@/lib/ai/openrouter";
+import { reportSystemPrompt } from "@/lib/ai/prompts";
+import { assertPlanFeature, requireApiSession } from "@/lib/dashboard-session";
 import { canExportReports } from "@/lib/permissions";
+import { getPlan, type PlanId } from "@/lib/plans";
 import prisma from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -105,6 +108,21 @@ export async function POST() {
     return NextResponse.json({ error: "You do not have permission to generate reports." }, { status: 403 });
   }
 
+  const planGate = assertPlanFeature(result.ctx, "reports");
+  if ("error" in planGate) return planGate.error;
+
+  const organization = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { plan: true },
+  });
+  const plan = (organization?.plan ?? "FREE") as PlanId;
+  if (getPlan(plan).limits.reportsPerMonth <= 0) {
+    return NextResponse.json(
+      { error: "Reports require a Beginner plan or higher. Upgrade in Settings → Billing." },
+      { status: 402 },
+    );
+  }
+
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   let items = await prisma.feedbackItem.findMany({
     where: { organizationId, ingestedAt: { gte: since } },
@@ -176,7 +194,7 @@ export async function POST() {
     return NextResponse.json({ report: fallback, organizationName });
   }
 
-  const model = process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash";
+  const model = analysisModelForPlan(plan);
   const sampleLines = items
     .slice(0, 80)
     .map((item) => {
@@ -186,39 +204,28 @@ export async function POST() {
     .join("\n");
 
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-        "X-Title": "LOOP Reports",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.3,
-        max_tokens: 1200,
-        messages: [
-          {
-            role: "system",
-            content: `You write Voice-of-Customer reports for product leaders. Return ONLY valid JSON with keys:
-summary (string, 2-4 sentences),
-themes (string array, 3-5 short theme titles),
-recommendedActions (string array, 3-4 concrete next steps).
-Do not invent metrics. Ground claims in the provided feedback.`,
-          },
-          {
-            role: "user",
-            content: `Organization: ${organizationName}
+    const response = await openRouterChat({
+      apiKey,
+      model,
+      title: "LOOP Reports",
+      temperature: 0.25,
+      maxTokens: 1300,
+      messages: [
+        {
+          role: "system",
+          content: reportSystemPrompt(),
+        },
+        {
+          role: "user",
+          content: `Organization: ${organizationName}
 Period: ${periodLabel}
 Counts — total: ${items.length}, positive: ${positive}, negative: ${negative}, neutral: ${neutral}
 Top channels: ${channels.map((c) => `${c.name} (${c.count})`).join(", ") || "n/a"}
 
 Feedback sample:
 ${sampleLines}`,
-          },
-        ],
-      }),
-      cache: "no-store",
+        },
+      ],
     });
 
     const payload = (await response.json()) as OpenRouterResponse;

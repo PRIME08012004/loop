@@ -1,4 +1,7 @@
 import { ratingToSentiment } from "@/lib/integrations/google-play/map-review";
+import { sentimentModelForPlan } from "@/lib/ai/openrouter";
+import { sentimentSystemPrompt } from "@/lib/ai/prompts";
+import type { PlanId } from "@/lib/plans";
 
 type Sentiment = "POSITIVE" | "NEGATIVE" | "NEUTRAL";
 
@@ -30,11 +33,15 @@ export function quickSentiment(content: string, rating?: number | null): Sentime
   return "NEUTRAL";
 }
 
-export async function classifySentiment(content: string, rating?: number | null): Promise<Sentiment> {
+export async function classifySentiment(
+  content: string,
+  rating?: number | null,
+  plan: PlanId = "FREE",
+): Promise<Sentiment> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return quickSentiment(content, rating);
 
-  const model = process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash";
+  const model = sentimentModelForPlan(plan);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
 
@@ -51,8 +58,7 @@ export async function classifySentiment(content: string, rating?: number | null)
         messages: [
           {
             role: "system",
-            content:
-              "Classify customer feedback sentiment. Reply with exactly one word: POSITIVE, NEGATIVE, or NEUTRAL.",
+            content: sentimentSystemPrompt(),
           },
           {
             role: "user",

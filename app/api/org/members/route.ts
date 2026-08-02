@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOrgOwner } from "@/lib/dashboard-session";
+import { canAccessFeature } from "@/lib/plans";
 import prisma from "@/lib/db";
 import type { OrgRole } from "@/lib/permissions";
 
@@ -33,7 +34,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { organizationId, userId } = await requireOrgOwner();
+  const ctx = await requireOrgOwner();
+  if (!canAccessFeature(ctx.plan, ctx.planExpiresAt, "team")) {
+    return NextResponse.json(
+      { error: "Upgrade to Beginner or higher to invite teammates.", upgradeUrl: "/dashboard/settings#billing" },
+      { status: 402 },
+    );
+  }
+
+  const { organizationId, userId } = ctx;
   const body = (await request.json()) as { email?: string; role?: string };
 
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";

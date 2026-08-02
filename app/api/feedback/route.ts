@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireApiSession } from "@/lib/dashboard-session";
+import { assertPlanFeature, requireApiSession } from "@/lib/dashboard-session";
 import { getOrgFeedback } from "@/lib/feedback-query";
 import { parseCsv } from "@/lib/parse-csv";
 import prisma from "@/lib/db";
@@ -18,6 +18,9 @@ export async function GET() {
 export async function POST(request: Request) {
   const result = await requireApiSession();
   if ("error" in result) return result.error;
+
+  const planGate = assertPlanFeature(result.ctx, "inbox");
+  if ("error" in planGate) return planGate.error;
 
   const { organizationId } = result.ctx;
   const body = (await request.json()) as { csv?: string; sourceName?: string };

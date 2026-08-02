@@ -1,10 +1,16 @@
 import { Suspense } from "react";
+import FeatureLock from "@/components/feature-lock";
 import IntegrationsSettings from "@/components/integrations-settings";
 import { requireOrgOwner } from "@/lib/dashboard-session";
+import { canAccessFeature, type PlanId } from "@/lib/plans";
 import prisma from "@/lib/db";
 
 export default async function IntegrationsPage() {
-  const { organizationId } = await requireOrgOwner();
+  const { organizationId, plan, planExpiresAt, effectivePlan } = await requireOrgOwner();
+
+  if (!canAccessFeature(plan, planExpiresAt, "integrations")) {
+    return <FeatureLock feature="integrations" currentPlan={effectivePlan as PlanId} />;
+  }
 
   const integration = await prisma.appIntegration.findUnique({
     where: { organizationId_provider: { organizationId, provider: "GOOGLE_PLAY" } },

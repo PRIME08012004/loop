@@ -15,7 +15,8 @@ export type IconName =
   | "search"
   | "plus"
   | "logout"
-  | "sparkle";
+  | "sparkle"
+  | "lock";
 
 interface IconProps {
   name: IconName;
@@ -152,6 +153,13 @@ export function LoopIcon({ name, className = "w-5 h-5" }: IconProps) {
         <svg {...common}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
           <circle cx="12" cy="12" r="3" />
+        </svg>
+      );
+    case "lock":
+      return (
+        <svg {...common}>
+          <rect x="5" y="11" width="14" height="10" rx="2" />
+          <path strokeLinecap="round" d="M8 11V8a4 4 0 0 1 8 0v3" />
         </svg>
       );
     default:

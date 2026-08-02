@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SAMPLE_FEEDBACK } from "@/lib/feedback-types";
+import { formatInr, PAID_PLANS } from "@/lib/plans";
 
 const GITHUB_REPO = "https://github.com/PRIME08012004/loop";
 
@@ -99,6 +100,7 @@ const FOOTER = {
   product: [
     { label: "Dashboard", href: "/dashboard" },
     { label: "Features", href: "#features" },
+    { label: "Pricing", href: "#pricing" },
     { label: "Integrations", href: "#brief" },
     { label: "Sign in", href: "/login" },
   ],
@@ -240,6 +242,9 @@ export default function LoopLanding() {
           </a>
           <a href="#stories" className="transition-colors hover:text-zinc-950 dark:hover:text-white">
             Stories
+          </a>
+          <a href="#pricing" className="transition-colors hover:text-zinc-950 dark:hover:text-white">
+            Pricing
           </a>
           <a
             href={GITHUB_REPO}
@@ -512,6 +517,115 @@ export default function LoopLanding() {
               </motion.blockquote>
             ))}
           </motion.div>
+        </div>
+      </section>
+
+      <section id="pricing" className="border-t border-zinc-200 dark:border-zinc-800">
+        <div className="mx-auto max-w-5xl px-6 py-24">
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true }}
+            variants={stagger}
+            className="mx-auto max-w-xl text-center"
+          >
+            <motion.p variants={fadeUp} className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">
+              Pricing
+            </motion.p>
+            <motion.h2
+              variants={fadeUp}
+              className="mt-3 text-3xl font-semibold tracking-tight"
+              style={{ fontFamily: "var(--font-display), system-ui" }}
+            >
+              Simple plans that pay for themselves.
+            </motion.h2>
+            <motion.p variants={fadeUp} className="mt-3 text-zinc-500 dark:text-zinc-400">
+              Start free. Upgrade when your feedback volume — and the questions you ask LOOP — grow.
+              Billed monthly in INR via Razorpay.
+            </motion.p>
+          </motion.div>
+
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.15 }}
+            variants={stagger}
+            className="mt-14 grid gap-4 md:grid-cols-3"
+          >
+            {PAID_PLANS.map((plan) => (
+              <motion.div
+                key={plan.id}
+                variants={cardReveal}
+                whileHover={{ y: -6, transition: { type: "spring", stiffness: 300, damping: 22 } }}
+                className={`flex h-full flex-col rounded-2xl border p-7 text-left ${
+                  plan.highlighted
+                    ? "border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950"
+                    : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+                }`}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="text-lg font-semibold tracking-tight">{plan.name}</h3>
+                  {plan.highlighted ? (
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                      Popular
+                    </span>
+                  ) : null}
+                </div>
+                <p
+                  className={`mt-2 text-sm leading-relaxed ${
+                    plan.highlighted ? "text-zinc-300 dark:text-zinc-600" : "text-zinc-500 dark:text-zinc-400"
+                  }`}
+                >
+                  {plan.tagline}
+                </p>
+                <p className="mt-6 text-3xl font-semibold tracking-tight">
+                  {formatInr(plan.priceInr)}
+                  <span
+                    className={`text-sm font-normal ${
+                      plan.highlighted ? "text-zinc-400 dark:text-zinc-500" : "text-zinc-400"
+                    }`}
+                  >
+                    /mo
+                  </span>
+                </p>
+                <ul
+                  className={`mt-6 flex-1 space-y-2.5 text-sm ${
+                    plan.highlighted ? "text-zinc-200 dark:text-zinc-700" : "text-zinc-600 dark:text-zinc-300"
+                  }`}
+                >
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex gap-2">
+                      <span className={plan.highlighted ? "text-zinc-500 dark:text-zinc-400" : "text-zinc-300"}>
+                        •
+                      </span>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/login?callbackUrl=/dashboard/settings"
+                  className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition ${
+                    plan.highlighted
+                      ? "bg-white text-zinc-950 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-800"
+                      : "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+                  }`}
+                >
+                  Choose {plan.name}
+                  <ArrowRightIcon weight="bold" className="h-3.5 w-3.5" />
+                </Link>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="mt-8 text-center text-sm text-zinc-400"
+          >
+            Free forever for light use — 50 feedback items and 20 Ask LOOP questions each month.
+            Secure checkout powered by Razorpay.
+          </motion.p>
         </div>
       </section>
 
