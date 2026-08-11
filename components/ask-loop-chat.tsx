@@ -16,7 +16,14 @@ import {
 } from "@tabler/icons-react";
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useTheme } from "@/components/theme-provider";
-import { buildFeedbackContext, parseCsv, type ParsedFeedbackRow } from "@/lib/parse-csv";
+import {
+  buildFeedbackContext,
+  MAX_ASK_CSV_ROWS,
+  parseCsv,
+  type ParsedFeedbackRow,
+} from "@/lib/parse-csv";
+
+const MAX_ASK_FILE_BYTES = 2 * 1024 * 1024;
 
 type Chart = {
   title: string;
@@ -102,10 +109,12 @@ export default function AskLoopChat({
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isReadingFile, setIsReadingFile] = useState(false);
+  const [isSavingData, setIsSavingData] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const hasData = feedback.length > 0;
 
@@ -116,8 +125,30 @@ export default function AskLoopChat({
     setChats(payload.chats ?? []);
   }
 
-  const applyCsvText = async (text: string, label: string) => {
-    const parsed = parseCsv(text);
+  const persistRowsInBackground = (rows: ParsedFeedbackRow[], label: string) => {
+    setIsSavingData(true);
+    void (async () => {
+      try {
+        const response = await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows, sourceName: label }),
+        });
+        if (!response.ok) {
+          const payload = (await response.json()) as { error?: string };
+          setError(payload.error ?? "Loaded for chat, but could not save to your organization.");
+        }
+      } catch {
+        setError("Loaded for chat, but saving failed. You can still ask questions about this file.");
+      } finally {
+        setIsSavingData(false);
+      }
+    })();
+  };
+
+  /** Parse locally, unlock the prompt immediately, save to org in the background. */
+  const applyCsvText = (text: string, label: string) => {
+    const parsed = parseCsv(text, { maxRows: MAX_ASK_CSV_ROWS });
     if (!parsed.length) {
       setError(
         "No feedback rows found. Paste CSV with a content, feedback, or message column — or one feedback item per line.",
@@ -125,72 +156,44 @@ export default function AskLoopChat({
       return false;
     }
 
-    // Load into chat immediately so the UI never waits on the network
     setFeedback(parsed);
     setSourceName(label);
     setShowPastePanel(false);
     setCsvDraft("");
     setError(null);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
 
-    try {
-      const response = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csv: text, sourceName: label }),
-      });
-      const payload = (await response.json()) as {
-        error?: string;
-        feedback?: Array<{ content: string; channel: string; createdAt: string }>;
-      };
-      if (!response.ok) {
-        // Keep local rows for chatting even if save failed
-        setError(payload.error ?? "Loaded locally, but could not save to your organization.");
-        return true;
-      }
-      if (payload.feedback?.length) {
-        setFeedback(
-          payload.feedback.map((row) => ({
-            content: row.content,
-            channel: row.channel,
-            createdAt: row.createdAt ?? new Date().toISOString(),
-          })),
-        );
-      }
-      return true;
-    } catch {
-      setError("Loaded locally, but saving failed. You can still ask questions about this file.");
-      return true;
-    }
+    persistRowsInBackground(parsed, label);
+    return true;
   };
 
-  const loadPastedCsv = async () => {
+  const loadPastedCsv = () => {
     if (!csvDraft.trim()) {
       setError("Paste your CSV data first, then click Load data.");
       return;
     }
-    setIsReadingFile(true);
-    try {
-      await applyCsvText(csvDraft, "Pasted CSV");
-    } finally {
-      setIsReadingFile(false);
-    }
+    applyCsvText(csvDraft, "Pasted CSV");
   };
 
   const uploadFeedback = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+
+    if (file.size > MAX_ASK_FILE_BYTES) {
+      setError("File is too large for Ask LOOP. Use a CSV under 2 MB, or paste up to 300 rows.");
+      return;
+    }
+
     setIsReadingFile(true);
     setError(null);
     const reader = new FileReader();
     reader.onload = () => {
-      void (async () => {
-        try {
-          await applyCsvText(String(reader.result ?? ""), file.name);
-        } finally {
-          setIsReadingFile(false);
-        }
-      })();
+      try {
+        applyCsvText(String(reader.result ?? ""), file.name);
+      } finally {
+        setIsReadingFile(false);
+      }
     };
     reader.onerror = () => {
       setError("Could not read that file. Try a .csv, .txt, or .md file.");
@@ -379,7 +382,7 @@ export default function AskLoopChat({
                   <button
                     type="button"
                     onClick={loadPastedCsv}
-                    disabled={!csvDraft.trim() || isReadingFile}
+                    disabled={!csvDraft.trim()}
                     className="rounded-full bg-violet-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-40"
                   >
                     Load data
@@ -433,7 +436,10 @@ export default function AskLoopChat({
                     {suggestions.map((suggestion) => (
                       <button
                         key={suggestion}
-                        onClick={() => setInput(suggestion)}
+                        onClick={() => {
+                          setInput(suggestion);
+                          inputRef.current?.focus();
+                        }}
                         className="rounded-xl border border-slate-200 p-3 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
                       >
                         {suggestion}
@@ -485,7 +491,15 @@ export default function AskLoopChat({
             {hasData && (
               <div className="mb-1 flex w-fit max-w-full items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
                 <IconFileText size={16} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-                <span className="truncate text-emerald-800 dark:text-emerald-200">{sourceName} · {feedback.length} rows</span>
+                <span className="truncate text-emerald-800 dark:text-emerald-200">
+                  {sourceName} · {feedback.length} rows
+                  {feedback.length >= MAX_ASK_CSV_ROWS ? " (capped)" : ""}
+                </span>
+                {isSavingData ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300">
+                    <IconLoader2 size={12} className="animate-spin" /> Saving
+                  </span>
+                ) : null}
                 <button type="button" onClick={() => setShowPastePanel(true)} className="rounded px-1.5 text-xs text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/40">Edit</button>
               </div>
             )}
@@ -500,6 +514,7 @@ export default function AskLoopChat({
                 {isReadingFile ? <IconLoader2 size={18} className="animate-spin" /> : <IconPaperclip size={18} />}
               </button>
               <textarea
+                ref={inputRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
@@ -508,14 +523,20 @@ export default function AskLoopChat({
                     event.currentTarget.form?.requestSubmit();
                   }
                 }}
-                disabled={isSending || isReadingFile}
+                disabled={isSending}
                 rows={1}
-                placeholder={hasData ? "Ask about your CSV data…" : "Load CSV first, then ask your question…"}
+                placeholder={
+                  isReadingFile
+                    ? "Reading file…"
+                    : hasData
+                      ? "Ask about your CSV data…"
+                      : "Load CSV first, then ask your question…"
+                }
                 className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-3 py-2 text-[15px] outline-none placeholder:text-slate-400 disabled:opacity-60"
               />
               <button
                 type="submit"
-                disabled={!input.trim() || isSending || isReadingFile}
+                disabled={!input.trim() || isSending || !hasData}
                 aria-label="Send message"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-30"
               >
@@ -523,7 +544,9 @@ export default function AskLoopChat({
               </button>
             </div>
           </form>
-          <p className="mt-2 text-center text-xs text-slate-400">Paste CSV → load data → ask anything. LOOP answers from your rows only.</p>
+          <p className="mt-2 text-center text-xs text-slate-400">
+            Paste or upload CSV → ask immediately. Up to {MAX_ASK_CSV_ROWS} rows load for chat; org save runs in the background.
+          </p>
         </div>
       </section>
     </div>

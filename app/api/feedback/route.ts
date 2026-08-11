@@ -2,11 +2,32 @@ import { NextResponse } from "next/server";
 import { assertPlanFeature, requireApiSession } from "@/lib/dashboard-session";
 import { getOrgFeedback } from "@/lib/feedback-query";
 import { getPlan } from "@/lib/plans";
-import { parseCsv } from "@/lib/parse-csv";
+import { MAX_ASK_CSV_ROWS, parseCsv, type ParsedFeedbackRow } from "@/lib/parse-csv";
 import prisma from "@/lib/db";
 import { quickSentiment } from "@/lib/sentiment";
 
-const MAX_CSV_ROWS = 300;
+function normalizeRows(input: unknown): ParsedFeedbackRow[] {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const item = row as Record<string, unknown>;
+    const content = typeof item.content === "string" ? item.content.trim() : "";
+    if (!content) return [];
+    return [
+      {
+        content: content.slice(0, 8000),
+        channel:
+          typeof item.channel === "string" && item.channel.trim()
+            ? item.channel.trim().slice(0, 120)
+            : "Pasted feedback",
+        createdAt:
+          typeof item.createdAt === "string" && !Number.isNaN(Date.parse(item.createdAt))
+            ? new Date(item.createdAt).toISOString()
+            : new Date().toISOString(),
+      },
+    ];
+  });
+}
 
 export async function GET() {
   const result = await requireApiSession();
@@ -37,15 +58,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json()) as { csv?: string; sourceName?: string };
+  const body = (await request.json()) as {
+    csv?: string;
+    rows?: unknown;
+    sourceName?: string;
+  };
 
+  const fromRows = normalizeRows(body.rows);
   const csv = typeof body.csv === "string" ? body.csv : "";
-  if (!csv.trim()) {
-    return NextResponse.json({ error: "CSV content is required." }, { status: 400 });
-  }
-
-  const parsed = parseCsv(csv);
-  const rows = parsed.slice(0, Math.min(MAX_CSV_ROWS, remaining));
+  const parsed = fromRows.length
+    ? fromRows
+    : csv.trim()
+      ? parseCsv(csv, { maxRows: MAX_ASK_CSV_ROWS })
+      : [];
+  const rows = parsed.slice(0, Math.min(MAX_ASK_CSV_ROWS, remaining));
   if (!rows.length) {
     return NextResponse.json({ error: "No feedback rows found in CSV." }, { status: 400 });
   }
@@ -71,11 +97,10 @@ export async function POST(request: Request) {
     skipDuplicates: true,
   });
 
-  const feedback = await getOrgFeedback(organizationId, 200);
   return NextResponse.json({
     created: data.length,
     truncated: parsed.length > rows.length,
-    feedback,
+    feedback: rows,
     sourceName: body.sourceName ?? "Pasted CSV",
   });
 }

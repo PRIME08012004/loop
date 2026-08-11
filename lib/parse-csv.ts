@@ -4,6 +4,8 @@ export type ParsedFeedbackRow = {
   createdAt: string;
 };
 
+export const MAX_ASK_CSV_ROWS = 300;
+
 function parseCsvLine(line: string): string[] {
   const cells: string[] = [];
   let current = "";
@@ -32,17 +34,30 @@ function parseCsvLine(line: string): string[] {
   return cells;
 }
 
-export function parseCsv(text: string): ParsedFeedbackRow[] {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (!lines.length) return [];
+export function parseCsv(
+  text: string,
+  options: { maxRows?: number } = {},
+): ParsedFeedbackRow[] {
+  const maxRows = options.maxRows ?? Number.POSITIVE_INFINITY;
+  const lines = text.split(/\r?\n/);
+  const nonEmpty: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed) nonEmpty.push(trimmed);
+    // Stop reading far past the row cap so huge files stay snappy.
+    if (Number.isFinite(maxRows) && nonEmpty.length > maxRows + 5) break;
+  }
+  if (!nonEmpty.length) return [];
 
-  const hasHeader = lines[0].toLowerCase().includes("content") ||
-    lines[0].toLowerCase().includes("feedback") ||
-    lines[0].toLowerCase().includes("message") ||
-    lines[0].toLowerCase().includes("channel");
+  const hasHeader =
+    nonEmpty[0].toLowerCase().includes("content") ||
+    nonEmpty[0].toLowerCase().includes("feedback") ||
+    nonEmpty[0].toLowerCase().includes("message") ||
+    nonEmpty[0].toLowerCase().includes("channel");
 
   if (!text.includes(",") && !hasHeader) {
-    return lines
+    return nonEmpty
+      .slice(0, Number.isFinite(maxRows) ? maxRows : undefined)
       .map((content) => ({
         content,
         channel: "Pasted feedback",
@@ -51,9 +66,14 @@ export function parseCsv(text: string): ParsedFeedbackRow[] {
       .filter((item) => item.content);
   }
 
-  const header = parseCsvLine(lines[0]).map((item) => item.toLowerCase());
+  const header = parseCsvLine(nonEmpty[0]).map((item) => item.toLowerCase());
   const contentIndex = header.findIndex(
-    (item) => item.includes("content") || item.includes("feedback") || item.includes("message") || item.includes("comment") || item.includes("text"),
+    (item) =>
+      item.includes("content") ||
+      item.includes("feedback") ||
+      item.includes("message") ||
+      item.includes("comment") ||
+      item.includes("text"),
   );
   const channelIndex = header.findIndex(
     (item) => item.includes("channel") || item.includes("source") || item.includes("type"),
@@ -61,24 +81,26 @@ export function parseCsv(text: string): ParsedFeedbackRow[] {
   const dateIndex = header.findIndex(
     (item) => item.includes("date") || item.includes("created") || item.includes("time"),
   );
-  const rows = hasHeader && contentIndex >= 0 ? lines.slice(1) : lines;
+  const rows = hasHeader && contentIndex >= 0 ? nonEmpty.slice(1) : nonEmpty;
+  const parsed: ParsedFeedbackRow[] = [];
 
-  return rows.flatMap((line) => {
+  for (const line of rows) {
+    if (parsed.length >= maxRows) break;
     const cells = parseCsvLine(line);
     const content = cells[contentIndex >= 0 ? contentIndex : 0]?.replace(/^"|"$/g, "");
-    if (!content) return [];
+    if (!content) continue;
     const suppliedDate = cells[dateIndex];
-    return [
-      {
-        content,
-        channel: cells[channelIndex]?.replace(/^"|"$/g, "") || "Pasted feedback",
-        createdAt:
-          suppliedDate && !Number.isNaN(Date.parse(suppliedDate))
-            ? new Date(suppliedDate).toISOString()
-            : new Date().toISOString(),
-      },
-    ];
-  });
+    parsed.push({
+      content,
+      channel: cells[channelIndex]?.replace(/^"|"$/g, "") || "Pasted feedback",
+      createdAt:
+        suppliedDate && !Number.isNaN(Date.parse(suppliedDate))
+          ? new Date(suppliedDate).toISOString()
+          : new Date().toISOString(),
+    });
+  }
+
+  return parsed;
 }
 
 export function buildFeedbackContext(rows: ParsedFeedbackRow[], maxChars = 12000) {
