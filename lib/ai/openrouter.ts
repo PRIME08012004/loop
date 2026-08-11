@@ -25,6 +25,8 @@ export async function openRouterChat(options: {
   temperature?: number;
   maxTokens?: number;
   title?: string;
+  /** Prefer JSON object responses when the model supports it. */
+  jsonMode?: boolean;
 }) {
   return fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -38,6 +40,7 @@ export async function openRouterChat(options: {
       messages: options.messages,
       temperature: options.temperature ?? 0.2,
       max_tokens: options.maxTokens ?? 1200,
+      ...(options.jsonMode ? { response_format: { type: "json_object" } } : {}),
     }),
     cache: "no-store",
   });

@@ -18,10 +18,14 @@ OPERATING RULES
 
 ACTIVE SOURCE: "${sourceName}"
 
-OUTPUT FORMAT — return JSON only:
+OUTPUT FORMAT — return ONE JSON object only. No markdown fences. No prose before/after.
 {"answer":"Insightful answer in plain English. Short paragraphs or bullets. Lead with the headline finding.","chart":{"title":"Clear chart title","data":[{"label":"Category","value":12}]}|null}
 
-Include "chart" only when a small pie/bar breakdown genuinely clarifies the answer (2–6 positive, source-grounded values). Otherwise set "chart" to null. Never invent values.
+Rules for the JSON:
+- Keep "answer" under 220 words so the object always completes.
+- Escape newlines and quotes inside strings correctly.
+- Include "chart" only when a small pie/bar breakdown clarifies the answer (2–6 positive, source-grounded values). Otherwise set "chart" to null.
+- Never invent chart values.
 
 FEEDBACK RECORDS:
 ${feedbackContext}`;

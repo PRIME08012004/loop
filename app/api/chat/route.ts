@@ -24,35 +24,95 @@ type Chart = {
   data: Array<{ label: string; value: number }>;
 };
 
+/** Pull a JSON string value for `answer` even when the object is truncated mid-string. */
+function extractAnswerField(text: string): string | null {
+  const marker = text.match(/"answer"\s*:\s*"/);
+  if (!marker || marker.index === undefined) return null;
+
+  let i = marker.index + marker[0].length;
+  let out = "";
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "\\") {
+      const next = text[i + 1];
+      if (next === undefined) break;
+      if (next === "n") out += "\n";
+      else if (next === "r") out += "\r";
+      else if (next === "t") out += "\t";
+      else if (next === '"' || next === "\\" || next === "/") out += next;
+      else if (next === "u" && /^[0-9a-fA-F]{4}/.test(text.slice(i + 2, i + 6))) {
+        out += String.fromCharCode(Number.parseInt(text.slice(i + 2, i + 6), 16));
+        i += 6;
+        continue;
+      } else out += next;
+      i += 2;
+      continue;
+    }
+    if (ch === '"') break;
+    out += ch;
+    i += 1;
+  }
+
+  const trimmed = out.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeChart(rawChart: Record<string, unknown> | null | undefined): Chart | null {
+  if (!rawChart || typeof rawChart !== "object") return null;
+  const data = Array.isArray(rawChart.data)
+    ? rawChart.data
+        .slice(0, 6)
+        .flatMap((item) => {
+          const entry = item as Record<string, unknown>;
+          const label = typeof entry.label === "string" ? entry.label.slice(0, 40) : "";
+          const numericValue = Number(entry.value);
+          return label && Number.isFinite(numericValue) && numericValue > 0 ? [{ label, value: numericValue }] : [];
+        })
+    : [];
+  return typeof rawChart.title === "string" && data.length >= 2
+    ? { title: rawChart.title.slice(0, 100), data }
+    : null;
+}
+
 function parseReply(content: string): { answer: string; chart: Chart | null } {
-  const cleaned = content.replace(/```json|```/gi, "").trim();
+  const cleaned = content.replace(/```(?:json)?/gi, "").trim();
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
 
-  if (start === -1 || end === -1) return { answer: content.trim(), chart: null };
-
-  try {
-    const value = JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
-    const answer = typeof value.answer === "string" ? value.answer.trim() : content.trim();
-    const rawChart = value.chart as Record<string, unknown> | null;
-    const data = Array.isArray(rawChart?.data)
-      ? rawChart.data
-          .slice(0, 6)
-          .flatMap((item) => {
-            const entry = item as Record<string, unknown>;
-            const label = typeof entry.label === "string" ? entry.label.slice(0, 40) : "";
-            const numericValue = Number(entry.value);
-            return label && Number.isFinite(numericValue) && numericValue > 0 ? [{ label, value: numericValue }] : [];
-          })
-      : [];
-
-    return {
-      answer: answer || "I could not create a readable answer. Please try asking in a different way.",
-      chart: typeof rawChart?.title === "string" && data.length >= 2 ? { title: rawChart.title.slice(0, 100), data } : null,
-    };
-  } catch {
-    return { answer: content.trim(), chart: null };
+  if (start !== -1 && end > start) {
+    try {
+      const value = JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
+      const answer = typeof value.answer === "string" ? value.answer.trim() : "";
+      if (answer) {
+        return {
+          answer,
+          chart: normalizeChart(value.chart as Record<string, unknown> | null),
+        };
+      }
+    } catch {
+      // Fall through to salvage truncated / malformed JSON.
+    }
   }
+
+  const salvaged = extractAnswerField(cleaned) ?? extractAnswerField(content);
+  if (salvaged) {
+    return { answer: salvaged, chart: null };
+  }
+
+  // Strip obvious JSON wrapper noise so users never see ```json blobs.
+  const stripped = cleaned
+    .replace(/^\s*\{[\s\S]*"answer"\s*:\s*"/i, "")
+    .replace(/"\s*,\s*"chart"[\s\S]*$/i, "")
+    .replace(/"\s*\}\s*$/i, "")
+    .trim();
+
+  return {
+    answer:
+      stripped && !stripped.startsWith("{")
+        ? stripped
+        : "I could not create a readable answer. Please try asking again.",
+    chart: null,
+  };
 }
 
 function providerError(status: number, message?: string) {
@@ -127,12 +187,13 @@ export async function POST(request: Request) {
 
   await prisma.chatMessage.create({ data: { chatId, role: "user", content: latestQuestion } });
 
-  const response = await openRouterChat({
+  let response = await openRouterChat({
     apiKey,
     model,
     title: "LOOP Analytics",
     temperature: 0.25,
-    maxTokens: 1100,
+    maxTokens: 2200,
+    jsonMode: true,
     messages: [
       {
         role: "system",
@@ -142,7 +203,32 @@ export async function POST(request: Request) {
     ],
   });
 
-  const payload = (await response.json()) as OpenRouterResponse;
+  let payload = (await response.json()) as OpenRouterResponse;
+  if (!response.ok) {
+    const detail = payload.error?.message?.toLowerCase() ?? "";
+    const jsonModeRejected =
+      detail.includes("response_format") ||
+      detail.includes("json_object") ||
+      detail.includes("json mode");
+    if (jsonModeRejected) {
+      response = await openRouterChat({
+        apiKey,
+        model,
+        title: "LOOP Analytics",
+        temperature: 0.25,
+        maxTokens: 2200,
+        messages: [
+          {
+            role: "system",
+            content: askLoopSystemPrompt(sourceName, feedbackContext),
+          },
+          ...messages,
+        ],
+      });
+      payload = (await response.json()) as OpenRouterResponse;
+    }
+  }
+
   if (!response.ok) {
     console.error("OpenRouter chat request failed", { status: response.status, message: payload.error?.message, model });
     return NextResponse.json({ error: providerError(response.status, payload.error?.message) }, { status: response.status });
