@@ -26,11 +26,24 @@ type ReportPayload = {
   positivePct: number;
   negativePct: number;
   neutralPct: number;
+  dateRange: { from: string | null; to: string | null };
+  sources: Array<{ name: string; count: number }>;
   channels: Array<{ name: string; count: number }>;
+  ratings: Array<{ label: string; count: number }>;
+  statuses: Array<{ name: string; count: number }>;
   summary: string;
   themes: string[];
-  quotes: Array<{ sentiment: string; content: string; channel: string }>;
+  quotes: Array<{
+    sentiment: string;
+    content: string;
+    channel: string;
+    source: string;
+    rating: number | null;
+    date: string;
+  }>;
   recommendedActions: string[];
+  risks: string[];
+  dataQuality: string;
 };
 
 function pct(part: number, total: number) {
@@ -49,17 +62,44 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
   }
 }
 
+function countBy(values: string[]) {
+  const map = new Map<string, number>();
+  for (const value of values) {
+    map.set(value, (map.get(value) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 function buildFallbackReport(input: {
   periodLabel: string;
   total: number;
   positive: number;
   negative: number;
   neutral: number;
-  channels: Array<{ name: string; count: number }>;
+  dateRange: ReportPayload["dateRange"];
+  sources: ReportPayload["sources"];
+  channels: ReportPayload["channels"];
+  ratings: ReportPayload["ratings"];
+  statuses: ReportPayload["statuses"];
   quotes: ReportPayload["quotes"];
 }): ReportPayload {
-  const { periodLabel, total, positive, negative, neutral, channels, quotes } = input;
+  const {
+    periodLabel,
+    total,
+    positive,
+    negative,
+    neutral,
+    dateRange,
+    sources,
+    channels,
+    ratings,
+    statuses,
+    quotes,
+  } = input;
   const topChannel = channels[0]?.name ?? "connected channels";
+  const topSource = sources[0]?.name ?? "available sources";
   const tone =
     negative > positive
       ? "Customer sentiment leaned negative this period — prioritize the top complaints before they compound."
@@ -71,6 +111,7 @@ function buildFallbackReport(input: {
   if (negative > 0) themes.push("Friction or unresolved issues in negative feedback");
   if (positive > 0) themes.push("Moments customers praised — preserve and amplify");
   if (channels.length > 1) themes.push(`Volume concentrated in ${topChannel}`);
+  if (sources.length > 1) themes.push(`Source mix led by ${topSource}`);
   if (!themes.length) themes.push("Not enough labeled feedback to extract themes yet");
 
   const recommendedActions: string[] = [];
@@ -82,6 +123,21 @@ function buildFallbackReport(input: {
   }
   recommendedActions.push("Ask LOOP one follow-up question about the strongest theme this week.");
 
+  const risks: string[] = [];
+  if (negative > positive && negative > 0) {
+    risks.push("Negative feedback currently outweighs positive — watch for compounding churn or store-rating drag.");
+  }
+  if ((statuses.find((status) => status.name === "new")?.count ?? 0) > total / 2) {
+    risks.push("Most items are still marked new — insight may stall without triage.");
+  }
+
+  const coverageBits = [
+    `${total} item${total === 1 ? "" : "s"}`,
+    sources.length ? `${sources.length} source${sources.length === 1 ? "" : "s"}` : null,
+    channels.length ? `${channels.length} channel${channels.length === 1 ? "" : "s"}` : null,
+    dateRange.from && dateRange.to ? `span ${dateRange.from} → ${dateRange.to}` : null,
+  ].filter(Boolean);
+
   return {
     periodLabel,
     generatedAt: new Date().toISOString(),
@@ -92,11 +148,17 @@ function buildFallbackReport(input: {
     positivePct: pct(positive, total),
     negativePct: pct(negative, total),
     neutralPct: pct(neutral, total),
+    dateRange,
+    sources,
     channels,
+    ratings,
+    statuses,
     summary: `${tone} Across ${total} item${total === 1 ? "" : "s"} in ${periodLabel.toLowerCase()}, sentiment was ${pct(positive, total)}% positive, ${pct(negative, total)}% negative, and ${pct(neutral, total)}% neutral.`,
     themes: themes.slice(0, 5),
     quotes,
     recommendedActions: recommendedActions.slice(0, 4),
+    risks: risks.slice(0, 3),
+    dataQuality: `Based on ${coverageBits.join(", ")}. Ratings and timestamps reflect fields present on each feedback item.`,
   };
 }
 
@@ -150,14 +212,30 @@ export async function POST() {
   const negative = items.filter((item) => item.sentiment === "NEGATIVE").length;
   const neutral = items.length - positive - negative;
 
-  const channelCounts = new Map<string, number>();
+  const channels = countBy(items.map((item) => item.channel)).slice(0, 8);
+  const sources = countBy(items.map((item) => item.source)).slice(0, 8);
+  const statuses = countBy(items.map((item) => item.status));
+
+  const ratingBuckets = new Map<string, number>();
   for (const item of items) {
-    channelCounts.set(item.channel, (channelCounts.get(item.channel) ?? 0) + 1);
+    const label = item.rating == null ? "Unrated" : `${item.rating}★`;
+    ratingBuckets.set(label, (ratingBuckets.get(label) ?? 0) + 1);
   }
-  const channels = [...channelCounts.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 8);
+  const ratings = [...ratingBuckets.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => {
+      if (a.label === "Unrated") return 1;
+      if (b.label === "Unrated") return -1;
+      return Number(b.label[0]) - Number(a.label[0]);
+    });
+
+  const dates = items
+    .map((item) => (item.reviewedAt ?? item.ingestedAt).toISOString().slice(0, 10))
+    .sort();
+  const dateRange = {
+    from: dates[0] ?? null,
+    to: dates[dates.length - 1] ?? null,
+  };
 
   const pickQuotes = (sentiment: SentimentLabel, limit: number) =>
     items
@@ -167,6 +245,9 @@ export async function POST() {
         sentiment: sentiment === "POSITIVE" ? "Positive" : sentiment === "NEGATIVE" ? "Negative" : "Neutral",
         content: item.content.slice(0, 280),
         channel: item.channel,
+        source: item.source,
+        rating: item.rating,
+        date: (item.reviewedAt ?? item.ingestedAt).toISOString().slice(0, 10),
       }));
 
   const quotes = [
@@ -181,7 +262,11 @@ export async function POST() {
     positive,
     negative,
     neutral,
+    dateRange,
+    sources,
     channels,
+    ratings,
+    statuses,
     quotes,
   });
 
@@ -199,7 +284,8 @@ export async function POST() {
     .slice(0, 80)
     .map((item) => {
       const date = (item.reviewedAt ?? item.ingestedAt).toISOString().slice(0, 10);
-      return `[${date}] (${item.sentiment ?? "NEUTRAL"}) ${item.channel}: ${item.content.slice(0, 220)}`;
+      const rating = item.rating == null ? "n/a" : `${item.rating}★`;
+      return `[${date}] (${item.sentiment ?? "NEUTRAL"}) source=${item.source} channel=${item.channel} rating=${rating} status=${item.status}: ${item.content.slice(0, 220)}`;
     })
     .join("\n");
 
@@ -209,7 +295,7 @@ export async function POST() {
       model,
       title: "LOOP Reports",
       temperature: 0.25,
-      maxTokens: 1300,
+      maxTokens: 1600,
       messages: [
         {
           role: "system",
@@ -219,8 +305,12 @@ export async function POST() {
           role: "user",
           content: `Organization: ${organizationName}
 Period: ${periodLabel}
+Date range: ${dateRange.from ?? "n/a"} → ${dateRange.to ?? "n/a"}
 Counts — total: ${items.length}, positive: ${positive}, negative: ${negative}, neutral: ${neutral}
-Top channels: ${channels.map((c) => `${c.name} (${c.count})`).join(", ") || "n/a"}
+Sources: ${sources.map((s) => `${s.name} (${s.count})`).join(", ") || "n/a"}
+Channels: ${channels.map((c) => `${c.name} (${c.count})`).join(", ") || "n/a"}
+Ratings: ${ratings.map((r) => `${r.label} (${r.count})`).join(", ") || "n/a"}
+Statuses: ${statuses.map((s) => `${s.name} (${s.count})`).join(", ") || "n/a"}
 
 Feedback sample:
 ${sampleLines}`,
@@ -253,13 +343,20 @@ ${sampleLines}`,
     const recommendedActions = Array.isArray(parsed.recommendedActions)
       ? parsed.recommendedActions.map(String).map((t) => t.slice(0, 200)).filter(Boolean).slice(0, 4)
       : fallback.recommendedActions;
+    const risks = Array.isArray(parsed.risks)
+      ? parsed.risks.map(String).map((t) => t.slice(0, 200)).filter(Boolean).slice(0, 3)
+      : fallback.risks;
     const summary =
       typeof parsed.summary === "string" && parsed.summary.trim()
         ? parsed.summary.trim().slice(0, 1200)
         : fallback.summary;
+    const dataQuality =
+      typeof parsed.dataQuality === "string" && parsed.dataQuality.trim()
+        ? parsed.dataQuality.trim().slice(0, 500)
+        : fallback.dataQuality;
 
     return NextResponse.json({
-      report: { ...fallback, summary, themes, recommendedActions },
+      report: { ...fallback, summary, themes, recommendedActions, risks, dataQuality },
       organizationName,
       usage: { used: credit.used, limit: credit.limit },
     });

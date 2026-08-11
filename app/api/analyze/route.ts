@@ -89,13 +89,33 @@ function normalizeAnalysis(value: unknown) {
       })
     : [];
 
+  const keyQuotes = Array.isArray(analysis.keyQuotes)
+    ? analysis.keyQuotes.slice(0, 5).map((quote) => {
+        const item = quote as Record<string, unknown>;
+        return {
+          sentiment: String(item.sentiment ?? "Neutral").slice(0, 20),
+          content: String(item.content ?? "").slice(0, 400),
+          channel: String(item.channel ?? "Source file").slice(0, 120),
+        };
+      }).filter((quote) => quote.content)
+    : [];
+
   return {
     summary: String(analysis.summary ?? "No summary returned."),
+    fileOverview: String(analysis.fileOverview ?? "File overview was not assessed."),
+    sentimentOverview: String(analysis.sentimentOverview ?? "Sentiment mix was not assessed."),
+    themes: Array.isArray(analysis.themes)
+      ? analysis.themes.map(String).map((theme) => theme.slice(0, 120)).filter(Boolean).slice(0, 5)
+      : [],
+    keyQuotes,
     hypotheses,
     recommendedActions: Array.isArray(analysis.recommendedActions)
       ? analysis.recommendedActions.slice(0, 4).map(String)
       : [],
     dataQuality: String(analysis.dataQuality ?? "Data quality was not assessed."),
+    risks: Array.isArray(analysis.risks)
+      ? analysis.risks.map(String).map((risk) => risk.slice(0, 200)).filter(Boolean).slice(0, 3)
+      : [],
   };
 }
 
@@ -108,10 +128,15 @@ function createProseAnalysis(text: string) {
 
   return {
     summary: briefing || "The AI did not return a readable briefing.",
+    fileOverview: "Structured file overview was not returned.",
+    sentimentOverview: "Structured sentiment overview was not returned.",
+    themes: [],
+    keyQuotes: [],
     hypotheses: [],
     recommendedActions: [],
     dataQuality:
       "The model returned a narrative briefing instead of structured fields. Review the summary and try again for a richer hypothesis breakdown.",
+    risks: [],
   };
 }
 
@@ -242,10 +267,27 @@ export async function POST(request: Request) {
     );
   }
 
+  const fileMeta = {
+    name: file.name,
+    type: file.type || "unknown",
+    sizeBytes: file.size,
+    extension: file.name.includes(".") ? `.${file.name.split(".").pop()?.toLowerCase()}` : "",
+  };
+
   try {
-    return NextResponse.json({ analysis: normalizeAnalysis(extractJson(text)), model });
+    return NextResponse.json({
+      analysis: normalizeAnalysis(extractJson(text)),
+      file: fileMeta,
+      generatedAt: new Date().toISOString(),
+      model,
+    });
   } catch {
     console.warn("OpenRouter returned a prose analysis instead of JSON.");
-    return NextResponse.json({ analysis: createProseAnalysis(text), model });
+    return NextResponse.json({
+      analysis: createProseAnalysis(text),
+      file: fileMeta,
+      generatedAt: new Date().toISOString(),
+      model,
+    });
   }
 }
