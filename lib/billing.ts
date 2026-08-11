@@ -4,8 +4,8 @@ import prisma from "@/lib/db";
 import { getPlan, type PlanId } from "@/lib/plans";
 
 export function getRazorpay() {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+  const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
   if (!keyId || !keySecret) {
     throw new Error("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required.");
   }
@@ -13,7 +13,7 @@ export function getRazorpay() {
 }
 
 export function razorpayConfigured() {
-  return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+  return Boolean(process.env.RAZORPAY_KEY_ID?.trim() && process.env.RAZORPAY_KEY_SECRET?.trim());
 }
 
 export function verifyPaymentSignature(orderId: string, paymentId: string, signature: string) {

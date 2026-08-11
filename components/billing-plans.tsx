@@ -8,9 +8,14 @@ type BillingProps = {
   planExpiresAt: string | null;
 };
 
+type RazorpayInstance = {
+  open: () => void;
+  on: (event: string, handler: (response: Record<string, unknown>) => void) => void;
+};
+
 declare global {
   interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+    Razorpay?: new (options: Record<string, unknown>) => RazorpayInstance;
   }
 }
 
@@ -20,12 +25,34 @@ function loadRazorpayScript() {
       resolve(true);
       return;
     }
+    const existing = document.querySelector<HTMLScriptElement>('script[data-loop-razorpay="1"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(Boolean(window.Razorpay)), { once: true });
+      existing.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(true);
+    script.async = true;
+    script.dataset.loopRazorpay = "1";
+    script.onload = () => resolve(Boolean(window.Razorpay));
     script.onerror = () => resolve(false);
     document.body.appendChild(script);
   });
+}
+
+async function readJson(response: Response) {
+  const text = await response.text();
+  if (!text) return {} as Record<string, unknown>;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      response.ok
+        ? "Checkout returned an invalid response."
+        : `Checkout failed (${response.status}). Check server logs.`,
+    );
+  }
 }
 
 export default function BillingPlans({ currentPlan, planExpiresAt }: BillingProps) {
@@ -42,60 +69,87 @@ export default function BillingPlans({ currentPlan, planExpiresAt }: BillingProp
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan }),
       });
-      const order = (await orderResponse.json()) as {
-        error?: string;
-        keyId?: string;
-        orderId?: string;
-        amount?: number;
-        currency?: string;
-        planName?: string;
-        organizationName?: string;
-        prefill?: { name?: string; email?: string };
-      };
+      const order = await readJson(orderResponse);
 
-      if (!orderResponse.ok || !order.keyId || !order.orderId) {
-        setMessage(order.error ?? "Could not start checkout.");
+      const keyId = typeof order.keyId === "string" ? order.keyId.trim() : "";
+      const orderId = typeof order.orderId === "string" ? order.orderId : "";
+      const amount = typeof order.amount === "number" ? order.amount : Number(order.amount);
+      const currency = typeof order.currency === "string" ? order.currency : "INR";
+      const planName = typeof order.planName === "string" ? order.planName : plan;
+      const organizationName =
+        typeof order.organizationName === "string" ? order.organizationName : "LOOP workspace";
+      const prefill =
+        order.prefill && typeof order.prefill === "object"
+          ? (order.prefill as { name?: string; email?: string })
+          : undefined;
+
+      if (!orderResponse.ok || !keyId || !orderId || !Number.isFinite(amount)) {
+        setMessage(
+          (typeof order.error === "string" && order.error) ||
+            "Could not start checkout. Confirm Razorpay keys and database migrations.",
+        );
         return;
       }
 
       const ready = await loadRazorpayScript();
       if (!ready || !window.Razorpay) {
-        setMessage("Razorpay checkout failed to load. Check your network and try again.");
+        setMessage("Razorpay checkout failed to load. Allow checkout.razorpay.com or try another network.");
         return;
       }
 
       const rzp = new window.Razorpay({
-        key: order.keyId,
-        amount: order.amount,
-        currency: order.currency,
+        key: keyId,
+        amount,
+        currency,
         name: "LOOP",
-        description: `${order.planName} plan — ${order.organizationName}`,
-        order_id: order.orderId,
-        prefill: order.prefill,
+        description: `${planName} plan — ${organizationName}`,
+        order_id: orderId,
+        prefill,
         theme: { color: "#18181b" },
         handler: async (response: {
           razorpay_order_id: string;
           razorpay_payment_id: string;
           razorpay_signature: string;
         }) => {
-          const verifyResponse = await fetch("/api/billing/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...response, plan }),
-          });
-          const payload = (await verifyResponse.json()) as { error?: string; plan?: string };
-          if (!verifyResponse.ok) {
-            setMessage(payload.error ?? "Payment received but verification failed. Contact support.");
-            return;
+          try {
+            const verifyResponse = await fetch("/api/billing/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...response, plan }),
+            });
+            const payload = await readJson(verifyResponse);
+            if (!verifyResponse.ok) {
+              setMessage(
+                (typeof payload.error === "string" && payload.error) ||
+                  "Payment received but verification failed. Contact support.",
+              );
+              return;
+            }
+            setMessage(`You're on ${String(payload.plan ?? planName)}. Refreshing…`);
+            window.location.reload();
+          } catch (verifyError) {
+            setMessage(
+              verifyError instanceof Error
+                ? verifyError.message
+                : "Payment received but verification failed. Contact support.",
+            );
           }
-          setMessage(`You're on ${payload.plan}. Refreshing…`);
-          window.location.reload();
+        },
+        modal: {
+          ondismiss: () => {
+            setMessage("Checkout closed before payment completed.");
+          },
         },
       });
 
+      rzp.on("payment.failed", (response) => {
+        const error = response.error as { description?: string; reason?: string } | undefined;
+        setMessage(error?.description || error?.reason || "Payment failed. Try again.");
+      });
+
       rzp.open();
-    } catch {
-      setMessage("Something went wrong starting checkout.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Something went wrong starting checkout.");
     } finally {
       setLoadingPlan(null);
     }
@@ -114,6 +168,9 @@ export default function BillingPlans({ currentPlan, planExpiresAt }: BillingProp
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Current plan: <span className="font-medium text-zinc-950 dark:text-white">{currentPlan}</span>
             {planExpiresAt ? ` · renews/ends ${new Date(planExpiresAt).toLocaleDateString("en-IN")}` : null}
+          </p>
+          <p className="mt-1 text-xs text-zinc-400">
+            Checkout opens Razorpay’s secure payment modal (it does not navigate away from LOOP).
           </p>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { analysisModelForPlan, openRouterChat } from "@/lib/ai/openrouter";
+import { analysisModelForPlan, openRouterChat, openRouterProviderError } from "@/lib/ai/openrouter";
 import { askLoopSystemPrompt } from "@/lib/ai/prompts";
 import { auth } from "@/lib/auth";
 import { consumeAskLoopCredit } from "@/lib/billing";
@@ -116,11 +116,7 @@ function parseReply(content: string): { answer: string; chart: Chart | null } {
 }
 
 function providerError(status: number, message?: string) {
-  const detail = message?.toLowerCase() ?? "";
-  if (status === 401 || status === 403) return "The AI connection could not be verified. Check OPENROUTER_API_KEY.";
-  if (status === 429 || detail.includes("rate limit")) return "LOOP is temporarily busy. Please try again in a moment.";
-  if (status === 402 || detail.includes("credits")) return "The configured AI model is unavailable for this account.";
-  return "LOOP could not respond right now. Please try again.";
+  return openRouterProviderError(status, message);
 }
 
 export async function POST(request: Request) {
