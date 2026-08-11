@@ -16,8 +16,8 @@ export default async function ReportsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <p className="text-sm text-zinc-500 dark:text-zinc-400">
-        Generate Voice-of-Customer reports from organization feedback or an uploaded file — including
-        sources, themes, quotes, risks, and data quality — then download the brief locally.
+        Generate Voice-of-Customer reports from organization feedback or an uploaded file. AI returns
+        structured data only — LOOP builds the downloadable PDF locally.
       </p>
       <ReportGenerator />
     </div>

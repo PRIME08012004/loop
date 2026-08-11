@@ -10,203 +10,15 @@ import {
   IconFileText,
 } from "@tabler/icons-react";
 import { useTheme } from "@/components/theme-provider";
-
-type OrgReport = {
-  kind?: "org";
-  periodLabel: string;
-  generatedAt: string;
-  total: number;
-  positive: number;
-  negative: number;
-  neutral: number;
-  positivePct: number;
-  negativePct: number;
-  neutralPct: number;
-  dateRange?: { from: string | null; to: string | null };
-  sources?: Array<{ name: string; count: number }>;
-  channels: Array<{ name: string; count: number }>;
-  ratings?: Array<{ label: string; count: number }>;
-  statuses?: Array<{ name: string; count: number }>;
-  summary: string;
-  themes: string[];
-  quotes: Array<{
-    sentiment: string;
-    content: string;
-    channel: string;
-    source?: string;
-    rating?: number | null;
-    date?: string;
-  }>;
-  recommendedActions: string[];
-  risks?: string[];
-  dataQuality?: string;
-};
-
-type FileReport = {
-  kind: "file";
-  periodLabel: string;
-  generatedAt: string;
-  file: {
-    name: string;
-    type: string;
-    sizeBytes: number;
-    extension: string;
-  };
-  summary: string;
-  fileOverview: string;
-  sentimentOverview: string;
-  themes: string[];
-  quotes: Array<{
-    sentiment: string;
-    content: string;
-    channel: string;
-    source?: string;
-    rating?: number | null;
-    date?: string;
-  }>;
-  hypotheses: Array<{
-    title: string;
-    confidence: number;
-    rationale: string;
-    evidence: string[];
-  }>;
-  recommendedActions: string[];
-  risks: string[];
-  dataQuality: string;
-};
-
-type Report = OrgReport | FileReport;
-
-function isFileReport(report: Report): report is FileReport {
-  return report.kind === "file";
-}
-
-function formatBytes(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatReportText(report: Report, organizationName?: string) {
-  const orgLine = organizationName ? ` — ${organizationName}` : "";
-  const lines: string[] = [
-    `LOOP Voice-of-Customer report${orgLine}`,
-    `Period: ${report.periodLabel}`,
-    `Generated: ${new Date(report.generatedAt).toLocaleString()}`,
-    "",
-  ];
-
-  if (isFileReport(report)) {
-    lines.push(
-      "File details",
-      `• Name: ${report.file.name}`,
-      `• Type: ${report.file.type || "unknown"}`,
-      `• Size: ${formatBytes(report.file.sizeBytes)}`,
-      `• Extension: ${report.file.extension || "n/a"}`,
-      "",
-      "File overview",
-      report.fileOverview,
-      "",
-      "Sentiment overview",
-      report.sentimentOverview,
-      "",
-    );
-  } else {
-    lines.push(
-      `Sentiment — ${report.total} items`,
-      `Positive: ${report.positive} (${report.positivePct}%)`,
-      `Negative: ${report.negative} (${report.negativePct}%)`,
-      `Neutral: ${report.neutral} (${report.neutralPct}%)`,
-      "",
-    );
-    if (report.dateRange?.from || report.dateRange?.to) {
-      lines.push(
-        "Date range",
-        `• From: ${report.dateRange.from ?? "n/a"}`,
-        `• To: ${report.dateRange.to ?? "n/a"}`,
-        "",
-      );
-    }
-    if (report.sources?.length) {
-      lines.push("Sources", ...report.sources.map((source) => `• ${source.name}: ${source.count}`), "");
-    }
-    if (report.channels.length) {
-      lines.push("Channels", ...report.channels.map((channel) => `• ${channel.name}: ${channel.count}`), "");
-    }
-    if (report.ratings?.length) {
-      lines.push("Ratings", ...report.ratings.map((rating) => `• ${rating.label}: ${rating.count}`), "");
-    }
-    if (report.statuses?.length) {
-      lines.push("Statuses", ...report.statuses.map((status) => `• ${status.name}: ${status.count}`), "");
-    }
-  }
-
-  lines.push("Summary", report.summary, "");
-  if (report.themes.length) {
-    lines.push("Themes", ...report.themes.map((theme) => `• ${theme}`), "");
-  }
-  if (report.quotes.length) {
-    lines.push(
-      "Verbatim quotes",
-      ...report.quotes.map((quote) => {
-        const meta = [
-          quote.sentiment,
-          quote.channel,
-          quote.source,
-          quote.rating != null ? `${quote.rating}★` : null,
-          quote.date,
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        return `• [${meta}] ${quote.content}`;
-      }),
-      "",
-    );
-  }
-  if (isFileReport(report) && report.hypotheses.length) {
-    lines.push("Hypotheses");
-    for (const hypothesis of report.hypotheses) {
-      lines.push(`• ${hypothesis.title} (${hypothesis.confidence}% confidence)`);
-      lines.push(`  ${hypothesis.rationale}`);
-      for (const evidence of hypothesis.evidence) {
-        lines.push(`  - ${evidence}`);
-      }
-    }
-    lines.push("");
-  }
-  if (report.risks?.length) {
-    lines.push("Risks", ...report.risks.map((risk) => `• ${risk}`), "");
-  }
-  if (report.recommendedActions.length) {
-    lines.push(
-      "Recommended actions",
-      ...report.recommendedActions.map((action, index) => `${index + 1}. ${action}`),
-      "",
-    );
-  }
-  if (report.dataQuality) {
-    lines.push("Data quality", report.dataQuality, "");
-  }
-
-  return lines.join("\n").trim() + "\n";
-}
-
-function downloadReport(report: Report, organizationName?: string) {
-  const text = formatReportText(report, organizationName);
-  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  const stamp = new Date(report.generatedAt).toISOString().slice(0, 10);
-  const baseName = isFileReport(report)
-    ? report.file.name.replace(/\.[^.]+$/, "")
-    : "loop-voc-report";
-  anchor.href = url;
-  anchor.download = `${baseName}-report-${stamp}.md`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
+import {
+  formatBytes,
+  formatReportText,
+  isFileReport,
+  type FileReport,
+  type LoopReport,
+  type OrgReport,
+} from "@/lib/report-document";
+import { downloadReportPdf } from "@/lib/report-pdf";
 
 export default function ReportGenerator() {
   const { isDark } = useTheme();
@@ -214,8 +26,9 @@ export default function ReportGenerator() {
   const [mode, setMode] = useState<"org" | "file">("org");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [report, setReport] = useState<Report | null>(null);
+  const [report, setReport] = useState<LoopReport | null>(null);
   const [organizationName, setOrganizationName] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
 
@@ -244,7 +57,7 @@ export default function ReportGenerator() {
 
   const generateFileReport = async () => {
     if (!selectedFile) {
-      setError("Choose a CSV, TXT, Markdown, or PDF file first.");
+      setError("Choose a CSV, TXT, or Markdown file first.");
       return;
     }
     setIsGenerating(true);
@@ -297,6 +110,19 @@ export default function ReportGenerator() {
     }
   };
 
+  const downloadPdf = async () => {
+    if (!report) return;
+    setIsDownloading(true);
+    setError(null);
+    try {
+      downloadReportPdf(report, organizationName);
+    } catch {
+      setError("Could not create the PDF. Please try again.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const card = isDark ? "border-white/10 bg-slate-900/60" : "border-slate-200 bg-white";
   const muted = isDark ? "text-slate-400" : "text-slate-500";
   const border = isDark ? "border-white/10" : "border-slate-200";
@@ -315,8 +141,8 @@ export default function ReportGenerator() {
           Voice-of-Customer report
         </h2>
         <p className={`mt-2 text-sm ${muted}`}>
-          Generate a full brief from organization feedback, or upload a CSV / TXT / Markdown / PDF
-          and include every useful detail from that file — then download it locally.
+          AI returns structured report data only. LOOP builds the downloadable PDF locally from that
+          data — the model never generates a PDF.
         </p>
 
         <div className="mt-5 flex flex-wrap gap-2">
@@ -349,13 +175,13 @@ export default function ReportGenerator() {
         ) : (
           <div className="mt-4 space-y-3">
             <p className={`text-sm ${muted}`}>
-              Upload a feedback export. The report covers file metadata, overview, sentiment read,
-              themes, quotes, hypotheses, risks, actions, and data-quality notes.
+              Upload CSV, TXT, or Markdown feedback. Large files are sampled for the AI context limit.
+              After generation, download a PDF built here from the returned data.
             </p>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.txt,.md,.pdf,text/csv,text/plain,text/markdown,application/pdf"
+              accept=".csv,.txt,.md,text/csv,text/plain,text/markdown"
               className="hidden"
               onChange={onFileChange}
             />
@@ -433,15 +259,16 @@ export default function ReportGenerator() {
               </button>
               <button
                 type="button"
-                onClick={() => downloadReport(report, organizationName)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                onClick={() => void downloadPdf()}
+                disabled={isDownloading}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition disabled:opacity-60 ${
                   isDark
                     ? "bg-white text-zinc-900 hover:bg-zinc-200"
                     : "bg-zinc-900 text-white hover:bg-zinc-800"
                 }`}
               >
-                <IconDownload size={14} />
-                Download
+                {isDownloading ? <IconLoader2 size={14} className="animate-spin" /> : <IconDownload size={14} />}
+                Download PDF
               </button>
             </div>
           </div>

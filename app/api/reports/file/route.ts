@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  isPromptLimitError,
+  prepareFileContextForModel,
+  promptLimitUserMessage,
+} from "@/lib/ai/file-context";
 import { analysisModelForPlan, openRouterChat } from "@/lib/ai/openrouter";
 import { fileAnalysisPrompt } from "@/lib/ai/prompts";
 import { consumeReportCredit } from "@/lib/billing";
@@ -13,9 +18,8 @@ const ACCEPTED_TYPES = new Set([
   "text/csv",
   "text/plain",
   "text/markdown",
-  "application/pdf",
 ]);
-const ACCEPTED_EXTENSIONS = [".csv", ".txt", ".md", ".pdf"];
+const ACCEPTED_EXTENSIONS = [".csv", ".txt", ".md"];
 
 type OpenRouterResponse = {
   choices?: Array<{ message?: { content?: string } }>;
@@ -168,10 +172,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Choose a file to generate a report." }, { status: 400 });
   }
   if (!isAcceptedFile(file)) {
-    return NextResponse.json({ error: "Upload a CSV, TXT, Markdown, or PDF file." }, { status: 415 });
+    return NextResponse.json({ error: "Upload a CSV, TXT, or Markdown file." }, { status: 415 });
   }
   if (file.size === 0 || file.size > MAX_FILE_SIZE) {
     return NextResponse.json({ error: "Files must be between 1 byte and 10 MB." }, { status: 413 });
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const prompt = fileAnalysisPrompt();
+  const prepared = prepareFileContextForModel({
+    fileName: file.name,
+    mimeType: file.type,
+    buffer,
+    prompt,
+  });
+  if ("error" in prepared) {
+    return NextResponse.json({ error: prepared.error }, { status: 413 });
   }
 
   const credit = await consumeReportCredit(organizationId, plan);
@@ -179,27 +195,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: credit.reason }, { status: 402 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const prompt = fileAnalysisPrompt();
   const model = analysisModelForPlan(plan);
-  const content =
-    file.type === "application/pdf"
-      ? [
-          { type: "text", text: prompt },
-          {
-            type: "file",
-            file: {
-              filename: file.name,
-              file_data: `data:application/pdf;base64,${buffer.toString("base64")}`,
-            },
-          },
-        ]
-      : [
-          {
-            type: "text",
-            text: `${prompt}\n\nSource file: ${file.name}\n<source>\n${buffer.toString("utf8")}\n</source>`,
-          },
-        ];
 
   try {
     const response = await openRouterChat({
@@ -208,17 +204,20 @@ export async function POST(request: Request) {
       title: "LOOP File Reports",
       temperature: 0.15,
       maxTokens: 2200,
-      messages: [{ role: "user", content }],
+      messages: [{ role: "user", content: prepared.content }],
     });
 
     const payload = (await response.json()) as OpenRouterResponse;
     if (!response.ok) {
+      const providerMessage = payload.error?.message;
       return NextResponse.json(
         {
-          error: payload.error?.message ?? "Could not analyze this file. Please try again.",
+          error: isPromptLimitError(providerMessage)
+            ? promptLimitUserMessage()
+            : providerMessage ?? "Could not analyze this file. Please try again.",
           usage: { used: credit.used, limit: credit.limit },
         },
-        { status: response.status >= 400 ? response.status : 502 },
+        { status: isPromptLimitError(providerMessage) ? 413 : response.status >= 400 ? response.status : 502 },
       );
     }
 
@@ -230,20 +229,31 @@ export async function POST(request: Request) {
       );
     }
 
+    const withTruncationNote = (report: ReturnType<typeof normalizeFileReport>) => {
+      if (!prepared.note) return report;
+      return {
+        ...report,
+        dataQuality: `${report.dataQuality} ${prepared.note}`.trim(),
+        fileOverview: `${report.fileOverview} (${prepared.note})`,
+      };
+    };
+
     try {
-      const report = normalizeFileReport(extractJson(text), file);
+      const report = withTruncationNote(normalizeFileReport(extractJson(text), file));
       return NextResponse.json({
         report,
         organizationName,
         usage: { used: credit.used, limit: credit.limit },
         model,
+        truncated: prepared.truncated,
       });
     } catch {
       return NextResponse.json({
-        report: proseFallback(text, file),
+        report: withTruncationNote(proseFallback(text, file)),
         organizationName,
         usage: { used: credit.used, limit: credit.limit },
         model,
+        truncated: prepared.truncated,
       });
     }
   } catch {

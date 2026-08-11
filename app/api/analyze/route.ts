@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  isPromptLimitError,
+  prepareFileContextForModel,
+  promptLimitUserMessage,
+} from "@/lib/ai/file-context";
 import { analysisModelForPlan, openRouterChat } from "@/lib/ai/openrouter";
 import { fileAnalysisPrompt } from "@/lib/ai/prompts";
 import { auth } from "@/lib/auth";
@@ -12,10 +17,9 @@ const ACCEPTED_TYPES = new Set([
   "text/csv",
   "text/plain",
   "text/markdown",
-  "application/pdf",
 ]);
 
-const ACCEPTED_EXTENSIONS = [".csv", ".txt", ".md", ".pdf"];
+const ACCEPTED_EXTENSIONS = [".csv", ".txt", ".md"];
 
 type OpenRouterResponse = {
   choices?: Array<{
@@ -143,6 +147,10 @@ function createProseAnalysis(text: string) {
 function getProviderErrorMessage(status: number, message?: string) {
   const normalizedMessage = message?.toLowerCase() ?? "";
 
+  if (isPromptLimitError(message)) {
+    return promptLimitUserMessage();
+  }
+
   if (
     status === 429 ||
     normalizedMessage.includes("quota exceeded") ||
@@ -160,7 +168,7 @@ function getProviderErrorMessage(status: number, message?: string) {
   }
 
   if (status === 400 || status === 413) {
-    return "This file could not be processed by the selected AI model. Try a smaller CSV, TXT, Markdown, or text-based PDF file.";
+    return "This file could not be processed by the selected AI model. Try a smaller CSV, TXT, or Markdown file.";
   }
 
   if (status >= 500) {
@@ -201,7 +209,7 @@ export async function POST(request: Request) {
 
   if (!isAcceptedFile(file)) {
     return NextResponse.json(
-      { error: "Upload a CSV, TXT, Markdown, or PDF file." },
+      { error: "Upload a CSV, TXT, or Markdown file." },
       { status: 415 },
     );
   }
@@ -216,25 +224,15 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const prompt = fileAnalysisPrompt();
   const model = analysisModelForPlan(plan);
-
-  const content =
-    file.type === "application/pdf"
-      ? [
-          { type: "text", text: prompt },
-          {
-            type: "file",
-            file: {
-              filename: file.name,
-              file_data: `data:application/pdf;base64,${buffer.toString("base64")}`,
-            },
-          },
-        ]
-      : [
-          {
-            type: "text",
-            text: `${prompt}\n\nSource file: ${file.name}\n<source>\n${buffer.toString("utf8")}\n</source>`,
-          },
-        ];
+  const prepared = prepareFileContextForModel({
+    fileName: file.name,
+    mimeType: file.type,
+    buffer,
+    prompt,
+  });
+  if ("error" in prepared) {
+    return NextResponse.json({ error: prepared.error }, { status: 413 });
+  }
 
   const response = await openRouterChat({
     apiKey,
@@ -242,7 +240,7 @@ export async function POST(request: Request) {
     title: "LOOP Analytics",
     temperature: 0.15,
     maxTokens: 1800,
-    messages: [{ role: "user", content }],
+    messages: [{ role: "user", content: prepared.content }],
   });
 
   const payload = (await response.json()) as OpenRouterResponse;
@@ -254,7 +252,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(
       { error: getProviderErrorMessage(response.status, payload.error?.message) },
-      { status: response.status },
+      { status: isPromptLimitError(payload.error?.message) ? 413 : response.status },
     );
   }
 
@@ -274,20 +272,27 @@ export async function POST(request: Request) {
     extension: file.name.includes(".") ? `.${file.name.split(".").pop()?.toLowerCase()}` : "",
   };
 
+  const attachNote = <T extends { dataQuality: string }>(analysis: T): T => {
+    if (!prepared.note) return analysis;
+    return { ...analysis, dataQuality: `${analysis.dataQuality} ${prepared.note}`.trim() };
+  };
+
   try {
     return NextResponse.json({
-      analysis: normalizeAnalysis(extractJson(text)),
+      analysis: attachNote(normalizeAnalysis(extractJson(text))),
       file: fileMeta,
       generatedAt: new Date().toISOString(),
       model,
+      truncated: prepared.truncated,
     });
   } catch {
     console.warn("OpenRouter returned a prose analysis instead of JSON.");
     return NextResponse.json({
-      analysis: createProseAnalysis(text),
+      analysis: attachNote(createProseAnalysis(text)),
       file: fileMeta,
       generatedAt: new Date().toISOString(),
       model,
+      truncated: prepared.truncated,
     });
   }
 }
