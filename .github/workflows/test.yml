@@ -11,6 +11,11 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-latest
 
+    env:
+      # Required by prisma.config.ts during `postinstall` (`prisma generate`).
+      # Unit tests do not hit the database.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/loop
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
