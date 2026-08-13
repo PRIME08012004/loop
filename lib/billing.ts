@@ -3,21 +3,45 @@ import Razorpay from "razorpay";
 import prisma from "@/lib/db";
 import { getPlan, type PlanId } from "@/lib/plans";
 
+/** Next/dotenv usually strip quotes; also handle pasted values with whitespace/quotes. */
+function envCredential(name: "RAZORPAY_KEY_ID" | "RAZORPAY_KEY_SECRET" | "RAZORPAY_WEBHOOK_SECRET") {
+  const raw = process.env[name];
+  if (!raw) return "";
+  let value = raw.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  return value;
+}
+
 export function getRazorpay() {
-  const keyId = process.env.RAZORPAY_KEY_ID?.trim();
-  const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+  const keyId = envCredential("RAZORPAY_KEY_ID");
+  const keySecret = envCredential("RAZORPAY_KEY_SECRET");
   if (!keyId || !keySecret) {
     throw new Error("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required.");
+  }
+  if (!keyId.startsWith("rzp_test_") && !keyId.startsWith("rzp_live_")) {
+    throw new Error("RAZORPAY_KEY_ID looks invalid. It should start with rzp_test_ or rzp_live_.");
+  }
+  if (keySecret.startsWith("rzp_")) {
+    throw new Error("RAZORPAY_KEY_SECRET looks like a Key ID. Paste the Key Secret from the Razorpay dashboard.");
   }
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 }
 
 export function razorpayConfigured() {
-  return Boolean(process.env.RAZORPAY_KEY_ID?.trim() && process.env.RAZORPAY_KEY_SECRET?.trim());
+  return Boolean(envCredential("RAZORPAY_KEY_ID") && envCredential("RAZORPAY_KEY_SECRET"));
+}
+
+export function razorpayKeyId() {
+  return envCredential("RAZORPAY_KEY_ID");
 }
 
 export function verifyPaymentSignature(orderId: string, paymentId: string, signature: string) {
-  const secret = process.env.RAZORPAY_KEY_SECRET;
+  const secret = envCredential("RAZORPAY_KEY_SECRET");
   if (!secret) return false;
   const expected = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
   try {
@@ -28,7 +52,7 @@ export function verifyPaymentSignature(orderId: string, paymentId: string, signa
 }
 
 export function verifyWebhookSignature(rawBody: string, signature: string | null) {
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  const secret = envCredential("RAZORPAY_WEBHOOK_SECRET");
   if (!secret || !signature) return false;
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
   try {

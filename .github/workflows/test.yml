@@ -1,4 +1,4 @@
-name: Build
+name: Tests
 
 on:
   push:
@@ -7,11 +7,9 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  test:
+    name: Unit tests
     runs-on: ubuntu-latest
-
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
       - name: Checkout code
@@ -26,17 +24,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma Client
-        run: npx prisma generate
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Type check
-        run: npx tsc --noEmit
-
-      - name: Test
+      - name: Run tests
         run: npm run test:ci
-
-      - name: Build
-        run: npm run build

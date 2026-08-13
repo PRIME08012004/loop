@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiSession } from "@/lib/dashboard-session";
-import { getRazorpay, razorpayConfigured } from "@/lib/billing";
+import { getRazorpay, razorpayConfigured, razorpayKeyId } from "@/lib/billing";
 import { getPlan, isPaidPlan, type PlanId } from "@/lib/plans";
 import prisma from "@/lib/db";
 
@@ -15,9 +15,18 @@ function razorpayFailureMessage(error: unknown) {
     message?: string;
     statusCode?: number;
   };
-  const description = record.error?.description || record.error?.reason || record.message;
-  if (description) return String(description);
-  if (record.statusCode === 401) return "Razorpay rejected the API keys. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.";
+  const description = (record.error?.description || record.error?.reason || record.message || "").toString();
+  const normalized = description.toLowerCase();
+
+  if (
+    record.statusCode === 401 ||
+    normalized.includes("authentication failed") ||
+    normalized.includes("invalid key")
+  ) {
+    return "Razorpay authentication failed. Regenerated Key ID and Key Secret must both be from the same mode (Test or Live) in the Razorpay Dashboard → Account & Settings → API Keys, then update RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET and restart the server.";
+  }
+
+  if (description) return description;
   return "Could not create a Razorpay order.";
 }
 
@@ -45,7 +54,7 @@ export async function POST(request: Request) {
 
     const definition = getPlan(plan);
     const { organizationId, organizationName, userEmail, userId } = result.ctx;
-    const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+    const keyId = razorpayKeyId();
     if (!keyId) {
       return NextResponse.json(
         { error: "Payments are not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET." },
@@ -114,7 +123,9 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Billing create-order failed", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not start checkout." },
+      {
+        error: error instanceof Error ? error.message : "Could not start checkout.",
+      },
       { status: 500 },
     );
   }
