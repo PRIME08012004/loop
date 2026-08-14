@@ -198,12 +198,19 @@ export function formatInr(amountInr: number) {
   }).format(amountInr);
 }
 
+/**
+ * Temporary unlock: treat every workspace as Pro (features + limits).
+ * Flip to false to restore plan gates. Payment checkout is separately disabled in billing UI/API.
+ */
+export const PLAN_GATES_OPEN = true;
+
 export function isPaidPlan(plan: PlanId) {
   return plan !== "FREE";
 }
 
 /** Paid plan that has not expired. */
 export function hasActivePaidPlan(plan: PlanId, planExpiresAt?: Date | string | null) {
+  if (PLAN_GATES_OPEN) return true;
   if (!isPaidPlan(plan)) return false;
   if (!planExpiresAt) return true;
   const expires = typeof planExpiresAt === "string" ? new Date(planExpiresAt) : planExpiresAt;
@@ -212,6 +219,7 @@ export function hasActivePaidPlan(plan: PlanId, planExpiresAt?: Date | string | 
 
 /** Treat expired subscriptions as Free for access checks. */
 export function effectivePlan(plan: PlanId, planExpiresAt?: Date | string | null): PlanId {
+  if (PLAN_GATES_OPEN) return "PRO";
   return hasActivePaidPlan(plan, planExpiresAt) ? plan : "FREE";
 }
 
@@ -220,6 +228,7 @@ export function canAccessFeature(
   planExpiresAt: Date | string | null | undefined,
   feature: PlanFeature,
 ) {
+  if (PLAN_GATES_OPEN) return true;
   const current = effectivePlan(plan, planExpiresAt);
   const required = FEATURE_MIN_PLAN[feature];
   return PLAN_RANK[current] >= PLAN_RANK[required];

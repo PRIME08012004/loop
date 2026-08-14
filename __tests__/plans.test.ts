@@ -1,4 +1,5 @@
 import {
+  PLAN_GATES_OPEN,
   canAccessFeature,
   effectivePlan,
   formatInr,
@@ -32,45 +33,55 @@ describe("formatInr", () => {
 describe("isPaidPlan / hasActivePaidPlan / effectivePlan", () => {
   it("treats FREE as unpaid", () => {
     expect(isPaidPlan("FREE")).toBe(false);
-    expect(hasActivePaidPlan("FREE")).toBe(false);
+    if (PLAN_GATES_OPEN) {
+      expect(hasActivePaidPlan("FREE")).toBe(true);
+      expect(effectivePlan("FREE")).toBe("PRO");
+    } else {
+      expect(hasActivePaidPlan("FREE")).toBe(false);
+    }
   });
 
   it("treats paid plans without expiry as active", () => {
     expect(isPaidPlan("ADVANCED")).toBe(true);
     expect(hasActivePaidPlan("ADVANCED")).toBe(true);
-    expect(effectivePlan("ADVANCED")).toBe("ADVANCED");
+    expect(effectivePlan("ADVANCED")).toBe(PLAN_GATES_OPEN ? "PRO" : "ADVANCED");
   });
 
-  it("treats expired paid plans as Free", () => {
+  it("treats expired paid plans as Free (unless gates are open)", () => {
     const expired = new Date(Date.now() - 60_000);
-    expect(hasActivePaidPlan("PRO", expired)).toBe(false);
-    expect(effectivePlan("PRO", expired)).toBe("FREE");
+    if (PLAN_GATES_OPEN) {
+      expect(hasActivePaidPlan("PRO", expired)).toBe(true);
+      expect(effectivePlan("PRO", expired)).toBe("PRO");
+    } else {
+      expect(hasActivePaidPlan("PRO", expired)).toBe(false);
+      expect(effectivePlan("PRO", expired)).toBe("FREE");
+    }
   });
 
   it("keeps unexpired paid plans active", () => {
     const future = new Date(Date.now() + 86_400_000);
     expect(hasActivePaidPlan("BEGINNER", future.toISOString())).toBe(true);
-    expect(effectivePlan("BEGINNER", future)).toBe("BEGINNER");
+    expect(effectivePlan("BEGINNER", future)).toBe(PLAN_GATES_OPEN ? "PRO" : "BEGINNER");
   });
 });
 
 describe("canAccessFeature", () => {
-  it("allows Free users on dashboard and settings only", () => {
+  it("allows Free users on dashboard and settings only (or everything when gates open)", () => {
     expect(canAccessFeature("FREE", null, "dashboard")).toBe(true);
     expect(canAccessFeature("FREE", null, "settings")).toBe(true);
-    expect(canAccessFeature("FREE", null, "inbox")).toBe(false);
-    expect(canAccessFeature("FREE", null, "integrations")).toBe(false);
+    expect(canAccessFeature("FREE", null, "inbox")).toBe(PLAN_GATES_OPEN);
+    expect(canAccessFeature("FREE", null, "integrations")).toBe(PLAN_GATES_OPEN);
   });
 
-  it("gates integrations behind Advanced+", () => {
-    expect(canAccessFeature("BEGINNER", null, "integrations")).toBe(false);
+  it("gates integrations behind Advanced+ (or unlocks when gates open)", () => {
+    expect(canAccessFeature("BEGINNER", null, "integrations")).toBe(PLAN_GATES_OPEN);
     expect(canAccessFeature("ADVANCED", null, "integrations")).toBe(true);
     expect(planAllowsIntegrations("PRO")).toBe(true);
   });
 
-  it("uses effective plan when subscription is expired", () => {
+  it("uses effective plan when subscription is expired (or unlocks when gates open)", () => {
     const expired = new Date(Date.now() - 1);
-    expect(canAccessFeature("PRO", expired, "ask")).toBe(false);
+    expect(canAccessFeature("PRO", expired, "ask")).toBe(PLAN_GATES_OPEN);
   });
 
   it("returns the minimum plan required for a feature", () => {
