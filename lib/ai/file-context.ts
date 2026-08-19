@@ -2,8 +2,9 @@
  * Keep uploaded file payloads under OpenRouter free-tier prompt budgets.
  * ~4 chars ≈ 1 token for English text; leave headroom for system prompt + completion.
  * PDFs are never sent to the model — LOOP builds download PDFs locally from structured data.
+ * File *reports* use lib/ai/file-report-context.ts (compact CSV stats + sample) instead.
  */
-export const MAX_TEXT_CONTEXT_CHARS = 36_000;
+export const MAX_TEXT_CONTEXT_CHARS = 24_000;
 
 export type PreparedFileContext = {
   content: Array<{ type: string; text?: string }>;

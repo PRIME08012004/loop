@@ -175,8 +175,9 @@ export default function ReportGenerator() {
         ) : (
           <div className="mt-4 space-y-3">
             <p className={`text-sm ${muted}`}>
-              Upload CSV, TXT, or Markdown feedback. Large files are sampled for the AI context limit.
-              After generation, download a PDF built here from the returned data.
+              Upload CSV, TXT, or Markdown feedback. LOOP parses the file locally (counts, channels,
+              quotes), sends only a small sample to the AI for the narrative, then builds the PDF
+              here — the model never generates a PDF.
             </p>
             <input
               ref={fileInputRef}
